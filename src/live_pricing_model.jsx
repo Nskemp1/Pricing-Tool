@@ -60,17 +60,39 @@ function KPI({ label, value, sub, color = C.text, bg = C.bg, border = C.border }
   );
 }
 
-function FunnelRow({ label, value, sub, color, pctVal }) {
+function ProjectionTable({ rows, S }) {
+  const milestones = [
+    { label: "M3", n: 3 },
+    { label: "M6", n: 6 },
+    { label: "Year 1", n: 12 },
+    { label: "Year 2", n: 24 },
+  ];
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
-      <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 12, color: C.textMid, fontWeight: 600 }}>{label}</div>
-        {sub && <div style={{ fontSize: 10, color: C.textFaint, fontFamily: "monospace" }}>{sub}</div>}
-      </div>
-      {pctVal !== undefined && <div style={{ fontFamily: "monospace", fontSize: 11, color: C.textFaint }}>{pct(pctVal)}</div>}
-      <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color, minWidth: 50, textAlign: "right" }}>{value}</div>
-    </div>
+    <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4 }}>
+      <thead>
+        <tr>
+          <th style={{ ...S.thl, padding: "6px 8px" }}>Metric</th>
+          {milestones.map((m) => (
+            <th key={m.label} style={{ ...S.th, padding: "6px 8px" }}>{m.label}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.label}>
+            <td style={{ ...S.tdl, padding: "7px 8px", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, flexShrink: 0 }} />
+              <span style={{ fontWeight: 600, color: C.textMid }}>{row.label}</span>
+            </td>
+            {milestones.map((m) => (
+              <td key={m.label} style={{ ...S.td, padding: "7px 8px", fontWeight: 700, color: row.enabled ? row.color : C.textFaint }}>
+                {row.enabled ? row.format(row.per * m.n) : "—"}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -546,14 +568,19 @@ export default function PricingModel() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <div style={{ width: 6, height: 20, background: C.teal, borderRadius: 3 }} />
                 <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>SDR Pipeline</span>
-                <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>steady-state / month</span>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
               </div>
-              <FunnelRow label="Avg SALs / mo" value={fmtN(calc.steadySdrAvgSals, 1)} sub={`${sdrFTE} SDR × ramp`} color={C.teal} />
-              <FunnelRow label="Avg SQLs / mo" value={fmtN(calc.steadySdrAvgSqls, 1)} sub={`${pct(salToSqlRate)} SAL→SQL`} color="#0d9488" pctVal={salToSqlRate} />
-              <FunnelRow label="Avg Pipeline / mo" value={calc.hasACV ? fmt(calc.steadySdrAvgPipeline) : "—"} sub={calc.hasACV ? `× ${fmt(avgContractValue)}` : "ACV required"} color={C.amber} />
-              <FunnelRow label="Avg Deals Won / mo" value={calc.hasClose ? fmtN(calc.steadySdrAvgWon, 2) : "—"} sub={calc.hasClose ? `${pct(closeRate)} close rate` : "Close rate required"} color={C.blue} pctVal={calc.hasClose ? closeRate : undefined} />
+              <ProjectionTable
+                rows={[
+                  { label: "Total SALs", per: calc.steadySdrAvgSals, color: C.teal, format: (v) => fmtN(v, 0), enabled: true },
+                  { label: "Total SQLs", per: calc.steadySdrAvgSqls, color: "#0d9488", format: (v) => fmtN(v, 0), enabled: true },
+                  { label: "Pipeline $", per: calc.steadySdrAvgPipeline, color: C.amber, format: (v) => fmt(v), enabled: calc.hasACV },
+                  { label: "Deals Won", per: calc.steadySdrAvgWon, color: C.blue, format: (v) => fmtN(v, 1), enabled: calc.hasClose },
+                ]}
+                S={S}
+              />
               <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>SDR Won Revenue</span>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>SDR Won Revenue (program)</span>
                 <span style={{ fontSize: 16, fontWeight: 800, color: C.green }}>{(calc.hasACV && calc.hasClose && calc.hasCycle) ? fmt(calc.monthly.reduce((a, x) => a + (x.sdrWonDealValue ?? 0), 0)) : "—"}</span>
               </div>
             </div>
@@ -564,14 +591,19 @@ export default function PricingModel() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <div style={{ width: 6, height: 20, background: C.purple, borderRadius: 3 }} />
                   <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>ISR Pipeline</span>
-                  <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>steady-state / month</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
                 </div>
-                <FunnelRow label="Avg SALs / mo" value={fmtN(calc.steadyIsrAvgSals, 1)} sub={`${isrFTE} ISR × ramp`} color={C.purple} />
-                <FunnelRow label="Avg SQLs / mo" value={fmtN(calc.steadyIsrAvgSqls, 1)} sub={`${pct(salToSqlRate)} SAL→SQL`} color="#7c3aed" pctVal={salToSqlRate} />
-                <FunnelRow label="Avg Pipeline / mo" value={calc.hasACV ? fmt(calc.steadyIsrAvgPipeline) : "—"} sub={calc.hasACV ? `× ${fmt(avgContractValue)}` : "ACV required"} color={C.amber} />
-                <FunnelRow label="Avg Deals Won / mo" value={calc.hasClose ? fmtN(calc.steadyIsrAvgWon, 2) : "—"} sub={calc.hasClose ? `${pct(closeRate)} close rate` : "Close rate required"} color={C.purple} pctVal={calc.hasClose ? closeRate : undefined} />
+                <ProjectionTable
+                  rows={[
+                    { label: "Total SALs", per: calc.steadyIsrAvgSals, color: C.purple, format: (v) => fmtN(v, 0), enabled: true },
+                    { label: "Total SQLs", per: calc.steadyIsrAvgSqls, color: "#7c3aed", format: (v) => fmtN(v, 0), enabled: true },
+                    { label: "Pipeline $", per: calc.steadyIsrAvgPipeline, color: C.amber, format: (v) => fmt(v), enabled: calc.hasACV },
+                    { label: "Deals Won", per: calc.steadyIsrAvgWon, color: C.purple, format: (v) => fmtN(v, 1), enabled: calc.hasClose },
+                  ]}
+                  S={S}
+                />
                 <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>ISR Won Revenue</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>ISR Won Revenue (program)</span>
                   <span style={{ fontSize: 16, fontWeight: 800, color: C.green }}>{(calc.hasACV && calc.hasClose && calc.hasCycle) ? fmt(calc.monthly.reduce((a, x) => a + (x.isrWonDealValue ?? 0), 0)) : "—"}</span>
                 </div>
               </div>
