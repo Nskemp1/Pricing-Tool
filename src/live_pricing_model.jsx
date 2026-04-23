@@ -187,10 +187,14 @@ export default function PricingModel() {
     const totalMonths = programLengthMonths + cycle;
 
     const monthlyBilling = sdrFTE * endSDR + isrFTE * endISR + aeFTE * endAE;
+    // Total recurring monthly paid by client (reps + management + data). Setup fee is one-time, not included.
+    const monthlyClientBilling = monthlyBilling + monthlyManagement + monthlyData;
     const fixedMonthlyCost = (sdrFTE * (sdrBase / 12)) + (isrFTE * (isrBase / 12)) + (aeFTE * (aeBase / 12));
     const smMonthlyCost = aeFTE > 0 ? ((smBase + smBonus) / 12 / smAEs) * aeFTE : 0;
 
-    let cumGM = 0, breakEven = -1;
+    // Break-even is computed from the CLIENT's perspective: the first month where cumulative won
+    // revenue from the program meets or exceeds cumulative client spend (billing + fees + setup).
+    let cumGM = 0, cumClientSpend = 0, cumClientWon = 0, breakEven = -1;
 
     // Unified monthly array — drives every calc tab
     // Splits SDR and ISR funnels so each team has its own pipeline view.
@@ -221,7 +225,7 @@ export default function PricingModel() {
       // Won revenue lags by avgSalesCycleMonths — source from both SDR and ISR ramps
       const sourceMonth = m - cycle;
       const srcIdx = sourceMonth - 1;
-      let sdrWonDealValue = null, isrWonDealValue = null, wonDealValue = null;
+      let sdrWonDealValue = null, isrWonDealValue = null, wonDealValue = null, wonDealsCount = null;
       if (hasCycle && hasACV && hasClose) {
         if (sourceMonth >= 1 && sourceMonth <= programLengthMonths) {
           const sdrSrcSals = (ramp[srcIdx] ?? 0) * sdrFTE;
@@ -229,10 +233,12 @@ export default function PricingModel() {
           sdrWonDealValue = sdrSrcSals * salToSqlRate * avgContractValue * closeRate;
           isrWonDealValue = isrSrcSals * salToSqlRate * avgContractValue * closeRate;
           wonDealValue = sdrWonDealValue + isrWonDealValue;
+          wonDealsCount = (sdrSrcSals + isrSrcSals) * salToSqlRate * closeRate;
         } else {
           sdrWonDealValue = 0;
           isrWonDealValue = 0;
           wonDealValue = 0;
+          wonDealsCount = 0;
         }
       }
       const wonValueForCalc = wonDealValue ?? 0;
@@ -256,12 +262,14 @@ export default function PricingModel() {
 
       const gm = revenue - cos;
       cumGM += gm;
-      if (breakEven === -1 && cumGM >= 0) breakEven = m;
+      cumClientSpend += revenue;
+      cumClientWon += wonValueForCalc;
+      if (breakEven === -1 && cumClientWon >= cumClientSpend && cumClientSpend > 0) breakEven = m;
 
       return {
         m, inProgram,
         // Legacy unified keys (kept for Expected Outcomes + Pipeline Detail tabs)
-        salsPerRep: sdrSalsPerRep, totalSals, totalSqls, pipelineCreated, dealsWon, wonDealValue,
+        salsPerRep: sdrSalsPerRep, totalSals, totalSqls, pipelineCreated, dealsWon, wonDealValue, wonDealsCount,
         // Per-role breakouts
         sdrSalsPerRep, sdrTotalSals, sdrTotalSqls, sdrPipeline, sdrDealsWon, sdrWonDealValue,
         isrSalsPerRep, isrTotalSals, isrTotalSqls, isrPipeline, isrDealsWon, isrWonDealValue,
@@ -319,7 +327,7 @@ export default function PricingModel() {
     return {
       monthly, totalMonths, cycle,
       y1, y2, y3, totRev, totGM, breakEven,
-      monthlyBill: monthlyBilling,
+      monthlyBill: monthlyBilling, monthlyClientBill: monthlyClientBilling,
       endAE, endSDR, endISR, roi: totRev > 0 ? totGM / totRev : 0,
       // outcomes (alias for Expected Outcomes tab back-compat)
       outcomes: monthly.map((x) => ({
@@ -553,10 +561,10 @@ export default function PricingModel() {
 
           {/* KPI row */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 16 }}>
-            <KPI label="Monthly Billing" value={fmt(calc.monthlyBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR`} color={C.blue} bg={C.blueLight} border={C.blueBorder} />
+            <KPI label="Monthly Billing" value={fmt(calc.monthlyClientBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR + mgmt + data`} color={C.blue} bg={C.blueLight} border={C.blueBorder} />
             <KPI label="3-Year Revenue" value={fmt(calc.totRev)} sub="Gross billings" />
             <KPI label="3-Year Gross Margin" value={fmt(calc.totGM)} sub={pct(calc.totGM / (calc.totRev || 1))} color={C.green} />
-            <KPI label="Break-even Month" value={calc.breakEven > 0 ? `Month ${calc.breakEven}` : "—"} sub="Cumulative GM >= 0" color={C.amber} />
+            <KPI label="Client Break-even" value={calc.breakEven > 0 ? `Month ${calc.breakEven}` : "—"} sub="Won rev ≥ client spend" color={C.amber} />
             <KPI label="Campaign ROI" value={pct(calc.roi)} sub="3yr GM / 3yr Revenue" color={C.purple} bg={C.purpleLight} border={C.purpleBorder} />
           </div>
 
@@ -710,8 +718,8 @@ export default function PricingModel() {
                 <tr style={{ background: C.bg }}>
                   <td style={S.tdl}>Total Deals Won</td>
                   {calc.monthly.map((o) => (
-                    <td key={o.m} style={S.td}>
-                      {o.inProgram ? (o.dealsWon == null ? "—" : fmtN(o.dealsWon, 2)) : "—"}
+                    <td key={o.m} style={{ ...S.td, color: (o.wonDealsCount ?? 0) > 0 ? C.blue : C.textFaint, fontWeight: (o.wonDealsCount ?? 0) > 0 ? 700 : 400 }}>
+                      {o.wonDealsCount == null ? "—" : fmtN(o.wonDealsCount, 2)}
                     </td>
                   ))}
                 </tr>
