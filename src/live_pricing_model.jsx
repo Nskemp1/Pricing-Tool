@@ -143,21 +143,6 @@ export default function PricingModel() {
   const [setupFee, setSetupFee] = useState(3000);
   const [varPct, setVarPct] = useState(0.02);
 
-  // Renewals
-  const [yr1Rate, setYr1Rate] = useState(0.80);
-  const [yr2Rate, setYr2Rate] = useState(0.75);
-
-  // Costs
-  const [aeBase, setAeBase] = useState(75000);
-  const [aeCommPct, setAeCommPct] = useState(0.05);
-  const [sdrBase, setSdrBase] = useState(50000);
-  const [isrBase, setIsrBase] = useState(40000);
-  const [isrCommPct, setIsrCommPct] = useState(0.04);
-  const [smBase, setSmBase] = useState(120000);
-  const [smBonus, setSmBonus] = useState(60000);
-  const [smAEs, setSmAEs] = useState(10);
-  const [fringePct, setFringePct] = useState(0.08);
-
   // Program-based ROI inputs (new)
   const [programLengthMonths, setProgramLengthMonths] = useState(6);
   const [monthlyManagement, setMonthlyManagement] = useState(1000);
@@ -189,12 +174,10 @@ export default function PricingModel() {
     const monthlyBilling = sdrFTE * endSDR + isrFTE * endISR + aeFTE * endAE;
     // Total recurring monthly paid by client (reps + management + data). Setup fee is one-time, not included.
     const monthlyClientBilling = monthlyBilling + monthlyManagement + monthlyData;
-    const fixedMonthlyCost = (sdrFTE * (sdrBase / 12)) + (isrFTE * (isrBase / 12)) + (aeFTE * (aeBase / 12));
-    const smMonthlyCost = aeFTE > 0 ? ((smBase + smBonus) / 12 / smAEs) * aeFTE : 0;
 
     // Break-even is computed from the CLIENT's perspective: the first month where cumulative won
     // revenue from the program meets or exceeds cumulative client spend (billing + fees + setup).
-    let cumGM = 0, cumClientSpend = 0, cumClientWon = 0, breakEven = -1;
+    let cumClientSpend = 0, cumClientWon = 0, breakEven = -1;
 
     // Unified monthly array — drives every calc tab
     // Splits SDR and ISR funnels so each team has its own pipeline view.
@@ -251,61 +234,32 @@ export default function PricingModel() {
       const setupThisMonth = m === 1 ? setupFee : 0;
       const revenue = billingThisMonth + mgmtThisMonth + dataThisMonth + variableRev + setupThisMonth;
 
-      // Costs (internal COGS — only while reps are on the program)
-      const repSalaries = inProgram ? fixedMonthlyCost : 0;
-      const sm = inProgram ? smMonthlyCost : 0;
-      const aeComm = wonValueForCalc * aeCommPct;
-      const isrComm = wonValueForCalc * isrCommPct;
-      const opEx = inProgram ? (mgmtThisMonth + dataThisMonth) : 0;
-      const baseCost = repSalaries + sm + aeComm + isrComm + opEx;
-      const cos = baseCost * (1 + fringePct) + setupThisMonth;
-
-      const gm = revenue - cos;
-      cumGM += gm;
       cumClientSpend += revenue;
       cumClientWon += wonValueForCalc;
       if (breakEven === -1 && cumClientWon >= cumClientSpend && cumClientSpend > 0) breakEven = m;
 
       return {
         m, inProgram,
-        // Legacy unified keys (kept for Expected Outcomes + Pipeline Detail tabs)
         salsPerRep: sdrSalsPerRep, totalSals, totalSqls, pipelineCreated, dealsWon, wonDealValue, wonDealsCount,
         // Per-role breakouts
         sdrSalsPerRep, sdrTotalSals, sdrTotalSqls, sdrPipeline, sdrDealsWon, sdrWonDealValue,
         isrSalsPerRep, isrTotalSals, isrTotalSqls, isrPipeline, isrDealsWon, isrWonDealValue,
-        revenue, cos, gm, gmPct: revenue > 0 ? gm / revenue : 0, cumGM,
+        revenue, cumClientSpend, cumClientWon,
       };
     });
 
-    // Year rollups
-    const sumRange = (arr, from, to, key) => arr.slice(from, to).reduce((a, x) => a + (x[key] ?? 0), 0);
-    const y1Rev = sumRange(monthly, 0, Math.min(12, totalMonths), "revenue");
-    const y1Cos = sumRange(monthly, 0, Math.min(12, totalMonths), "cos");
-    const y1Won = sumRange(monthly, 0, Math.min(12, totalMonths), "wonDealValue");
-    const y1Sals = sumRange(monthly, 0, Math.min(12, totalMonths), "totalSals");
-    const y1Sqls = sumRange(monthly, 0, Math.min(12, totalMonths), "totalSqls");
-    const y1Deals = sumRange(monthly, 0, Math.min(12, totalMonths), "dealsWon");
-    const y1Pipeline = sumRange(monthly, 0, Math.min(12, totalMonths), "pipelineCreated");
-
-    // Per-year rollup renewal math (clean, not per-month)
-    const y2Rev = y1Won * yr1Rate;
-    const y3Rev = y2Rev * yr2Rate;
-    // Year 2/3 COS approximated as Y1 COS carried forward at renewal rates (no new rep costs post-program,
-    // but management of renewed accounts assumed proportional)
-    const y2Cos = y1Cos * 0; // renewals have no rep-salary COGS in program window
-    const y3Cos = 0;
-
-    const y1 = { rev: y1Rev, cos: y1Cos, gm: y1Rev - y1Cos, gmPct: y1Rev > 0 ? (y1Rev - y1Cos) / y1Rev : 0, wonRev: y1Won, sals: y1Sals, sqls: y1Sqls, deals: y1Deals, pipeline: y1Pipeline };
-    const y2 = { rev: y2Rev, cos: y2Cos, gm: y2Rev - y2Cos, gmPct: y2Rev > 0 ? (y2Rev - y2Cos) / y2Rev : 0, wonRev: y2Rev };
-    const y3 = { rev: y3Rev, cos: y3Cos, gm: y3Rev - y3Cos, gmPct: y3Rev > 0 ? (y3Rev - y3Cos) / y3Rev : 0, wonRev: y3Rev };
-
-    const totRev = y1.rev + y2.rev + y3.rev;
-    const totGM = y1.gm + y2.gm + y3.gm;
-    const totalWonDealValue = monthly.reduce((a, x) => a + (x.wonDealValue ?? 0), 0);
-    const totalPipelineCreated = monthly.reduce((a, x) => a + (x.pipelineCreated ?? 0), 0);
-    const totalDealsWon = monthly.reduce((a, x) => a + (x.dealsWon ?? 0), 0);
-    const totalSalsSum = monthly.reduce((a, x) => a + x.totalSals, 0);
-    const totalSqlsSum = monthly.reduce((a, x) => a + x.totalSqls, 0);
+    // Program rollups (single program window — no Y2/Y3 renewal projection)
+    const sumAll = (key) => monthly.reduce((a, x) => a + (x[key] ?? 0), 0);
+    const totalClientSpend = sumAll("revenue");
+    const totals = {
+      clientSpend: totalClientSpend,
+      sals: sumAll("totalSals"),
+      sqls: sumAll("totalSqls"),
+      deals: sumAll("dealsWon"),
+      pipeline: sumAll("pipelineCreated"),
+      wonRev: sumAll("wonDealValue"),
+    };
+    const totalWonDealValue = totals.wonRev;
 
     // Steady-state (in-program) averages for the overview pipeline cards
     const inProgramMonthly = monthly.filter((x) => x.inProgram);
@@ -326,16 +280,14 @@ export default function PricingModel() {
 
     return {
       monthly, totalMonths, cycle,
-      y1, y2, y3, totRev, totGM, breakEven,
+      totals, breakEven, totalClientSpend,
       monthlyBill: monthlyBilling, monthlyClientBill: monthlyClientBilling,
-      endAE, endSDR, endISR, roi: totRev > 0 ? totGM / totRev : 0,
-      // outcomes (alias for Expected Outcomes tab back-compat)
-      outcomes: monthly.map((x) => ({
-        month: x.m, inProgram: x.inProgram,
-        salsPerSdr: x.salsPerRep, totalSals: x.totalSals, totalSqls: x.totalSqls,
-        pipelineCreated: x.pipelineCreated, dealsWon: x.dealsWon, wonDealValue: x.wonDealValue,
-      })),
-      totalWonDealValue, totalPipelineCreated, totalDealsWon, totalSalsSum, totalSqlsSum,
+      endAE, endSDR, endISR,
+      totalWonDealValue,
+      totalPipelineCreated: totals.pipeline,
+      totalDealsWon: totals.deals,
+      totalSalsSum: totals.sals,
+      totalSqlsSum: totals.sqls,
       hasACV, hasClose, hasCycle,
       steadyAvgSals, steadyAvgSqls, steadyAvgPipeline, steadyAvgWon,
       steadySdrAvgSals, steadySdrAvgSqls, steadySdrAvgPipeline, steadySdrAvgWon,
@@ -343,8 +295,7 @@ export default function PricingModel() {
     };
   }, [aeFTE, sdrFTE, isrFTE, priceAE, priceSDR, priceISR, discountAE, discountSDR, discountISR,
     setupFee, varPct, monthlyManagement, monthlyData,
-    salToSqlRate, closeRate, avgContractValue, avgSalesCycleMonths, ramp, isrRamp, programLengthMonths,
-    yr1Rate, yr2Rate, aeBase, aeCommPct, sdrBase, isrBase, isrCommPct, smBase, smBonus, smAEs, fringePct]);
+    salToSqlRate, closeRate, avgContractValue, avgSalesCycleMonths, ramp, isrRamp, programLengthMonths]);
 
   // —— STYLES ————————————————————————————————————————————————————————————————
   const S = {
@@ -360,10 +311,7 @@ export default function PricingModel() {
     thl: { padding: "7px 10px", textAlign: "left", color: C.textLight, borderBottom: `1px solid ${C.border}`, fontSize: 11, fontWeight: 600, fontFamily: "monospace", background: C.bg },
     td: { padding: "6px 10px", textAlign: "right", color: C.textMid, borderBottom: `1px solid #f1f5f9`, fontSize: 12, fontFamily: "monospace" },
     tdl: { padding: "6px 10px", textAlign: "left", color: C.slate, borderBottom: `1px solid #f1f5f9`, fontSize: 12, fontFamily: "monospace" },
-    tdG: { padding: "6px 10px", textAlign: "right", color: C.green, borderBottom: `1px solid #f1f5f9`, fontSize: 12, fontFamily: "monospace", fontWeight: 700 },
-    tdR: { padding: "6px 10px", textAlign: "right", color: "#dc2626", borderBottom: `1px solid #f1f5f9`, fontSize: 12, fontFamily: "monospace", fontWeight: 700 },
   };
-  const gmTd = (v) => v >= 0 ? S.tdG : S.tdR;
 
   const card = (bg, border) => ({ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 10 });
 
@@ -385,8 +333,8 @@ export default function PricingModel() {
           <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>AE / SDR / ISR Pricing Model</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 20, alignItems: "center" }}>
-          <span style={{ fontFamily: "monospace", fontSize: 11, color: C.blue, fontWeight: 700 }}>Monthly: {fmt(calc.monthlyBill)}</span>
-          <span style={{ fontFamily: "monospace", fontSize: 11, color: C.green, fontWeight: 700 }}>3yr GM: {fmt(calc.totGM)}</span>
+          <span style={{ fontFamily: "monospace", fontSize: 11, color: C.blue, fontWeight: 700 }}>Monthly: {fmt(calc.monthlyClientBill)}</span>
+          <span style={{ fontFamily: "monospace", fontSize: 11, color: C.green, fontWeight: 700 }}>Won: {calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"}</span>
           <span style={{ fontFamily: "monospace", fontSize: 11, color: C.textLight }}>Break-even: {calc.breakEven > 0 ? `Mo ${calc.breakEven}` : "—"}</span>
           <div style={{ display: "flex", gap: 5 }}>
             {aeFTE > 0 && <Badge color={C.blue}>{aeFTE} AE</Badge>}
@@ -430,7 +378,6 @@ export default function PricingModel() {
               <Field label="One-Time Program & Tech Setup" value={setupFee} onChange={setSetupFee} />
               <Field label="Monthly Management" value={monthlyManagement} onChange={setMonthlyManagement} />
               <Field label="Monthly Data" value={monthlyData} onChange={setMonthlyData} />
-              <Field label="SDR Annual Base Salary" value={sdrBase} onChange={setSdrBase} />
             </Collapsible>
 
             <Collapsible title="Client Inputs" accent={C.teal} defaultOpen={true}>
@@ -464,8 +411,6 @@ export default function PricingModel() {
                 <Field label="Price per ISR / month" value={priceISR} onChange={setPriceISR} />
                 <Field label="ISR Discount" value={discountISR} onChange={setDiscountISR} prefix="" suffix="%" />
                 <div style={{ fontFamily: "monospace", fontSize: 11, color: C.purple, marginBottom: 10, background: C.purpleLight, borderRadius: 5, padding: "4px 8px" }}>End price: {fmt(calc.endISR)}/mo</div>
-                <Field label="ISR Annual Base Salary" value={isrBase} onChange={setIsrBase} />
-                <Slider label="ISR ICV Commission %" value={isrCommPct} min={0.01} max={0.12} step={0.005} onChange={setIsrCommPct} format={pct} color={C.purple} />
               </Collapsible>
 
               <Collapsible title="Client Inputs" accent={C.purple} defaultOpen={true}>
@@ -507,8 +452,6 @@ export default function PricingModel() {
                 <Field label="Price per AE / month" value={priceAE} onChange={setPriceAE} />
                 <Field label="AE Discount" value={discountAE} onChange={setDiscountAE} prefix="" suffix="%" />
                 <div style={{ fontFamily: "monospace", fontSize: 11, color: C.blue, marginBottom: 10, background: C.blueLight, borderRadius: 5, padding: "4px 8px" }}>End price: {fmt(calc.endAE)}/mo</div>
-                <Field label="AE Annual Base Salary" value={aeBase} onChange={setAeBase} />
-                <Slider label="AE ICV Commission %" value={aeCommPct} min={0.02} max={0.15} step={0.005} onChange={setAeCommPct} format={pct} color={C.blue} />
               </Collapsible>
 
               <Collapsible title="Client Inputs" accent={C.blue} defaultOpen={true}>
@@ -528,7 +471,7 @@ export default function PricingModel() {
 
           {/* Monthly billing summary (always visible) */}
           <div style={{ ...card(C.blueLight, C.blueBorder), fontSize: 11, fontFamily: "monospace", color: C.blue, marginTop: 10 }}>
-            Monthly billing: {fmt(calc.monthlyBill)}
+            Monthly billing: {fmt(calc.monthlyClientBill)}
           </div>
 
           {/* ——— ADVANCED: always available, collapsed by default ———————— */}
@@ -539,33 +482,17 @@ export default function PricingModel() {
           <Collapsible title="Variable Revenue" accent={C.amber} defaultOpen={false}>
             <Slider label="Variable % of ICV" value={varPct} min={0} max={0.05} step={0.005} onChange={setVarPct} format={pct} color={C.amber} />
           </Collapsible>
-
-          <Collapsible title="Renewals" accent={C.green} defaultOpen={false}>
-            <Slider label="Yr 1 Renewal Rate" value={yr1Rate} min={0.4} max={1} step={0.01} onChange={setYr1Rate} format={pct} color={C.green} />
-            <Slider label="Yr 2 Renewal Rate" value={yr2Rate} min={0.4} max={1} step={0.01} onChange={setYr2Rate} format={pct} color={C.green} />
-          </Collapsible>
-
-          <Collapsible title="Sales Management" accent={C.slate} defaultOpen={false}>
-            <Field label="SM Base (annual)" value={smBase} onChange={setSmBase} />
-            <Field label="SM Bonus (annual)" value={smBonus} onChange={setSmBonus} />
-            <Field label="AEs per Sales Manager" value={smAEs} onChange={setSmAEs} prefix="" />
-          </Collapsible>
-
-          <Collapsible title="Overhead" accent={C.slate} defaultOpen={false}>
-            <Slider label="Fringe / Overhead %" value={fringePct} min={0.04} max={0.25} step={0.01} onChange={setFringePct} format={pct} color={C.slate} />
-          </Collapsible>
         </div>
 
         {/* —— MAIN CONTENT ————————————————————————————————————————————————— */}
         <div style={S.main}>
 
           {/* KPI row */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 16 }}>
             <KPI label="Monthly Billing" value={fmt(calc.monthlyClientBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR + mgmt + data`} color={C.blue} bg={C.blueLight} border={C.blueBorder} />
-            <KPI label="3-Year Revenue" value={fmt(calc.totRev)} sub="Gross billings" />
-            <KPI label="3-Year Gross Margin" value={fmt(calc.totGM)} sub={pct(calc.totGM / (calc.totRev || 1))} color={C.green} />
+            <KPI label="Total Client Investment" value={fmt(calc.totalClientSpend)} sub="Program total (billing + fees + setup)" />
+            <KPI label="Total Won Revenue" value={calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"} sub="ICV closed from program pipeline" color={C.green} />
             <KPI label="Client Break-even" value={calc.breakEven > 0 ? `Month ${calc.breakEven}` : "—"} sub="Won rev ≥ client spend" color={C.amber} />
-            <KPI label="Campaign ROI" value={pct(calc.roi)} sub="3yr GM / 3yr Revenue" color={C.purple} bg={C.purpleLight} border={C.purpleBorder} />
           </div>
 
           {/* FUNNEL OVERVIEW CARDS */}
@@ -731,6 +658,20 @@ export default function PricingModel() {
                     </td>
                   ))}
                 </tr>
+                <tr style={{ background: C.bg }}>
+                  <td style={{ ...S.tdl, fontWeight: 700, color: C.blue }}>Cumulative ICV</td>
+                  {(() => {
+                    let cumICV = 0;
+                    return calc.monthly.map((o) => {
+                      cumICV += (o.wonDealValue ?? 0);
+                      return (
+                        <td key={o.m} style={{ ...S.td, color: cumICV > 0 ? C.blue : C.textFaint, fontWeight: 700 }}>
+                          {o.wonDealValue == null ? "—" : fmt(cumICV)}
+                        </td>
+                      );
+                    });
+                  })()}
+                </tr>
               </tbody>
             </table>
             <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 24, flexWrap: "wrap", background: C.bg, fontFamily: "monospace", fontSize: 12 }}>
@@ -775,42 +716,33 @@ export default function PricingModel() {
 
           {/* Tabs */}
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, display: "inline-flex", gap: 3, marginBottom: 12 }}>
-            {[["summary","Year Summary"],["monthly","Monthly P&L"],["pipeline","Pipeline Detail"],["icv","ICV Waterfall"]].map(([k,v]) => (
+            {[["summary","Program Totals"],["monthly","Monthly Cashflow"]].map(([k,v]) => (
               <button key={k} style={S.tabBtn(tab === k)} onClick={() => setTab(k)}>{v}</button>
             ))}
           </div>
 
-          {/* —— SUMMARY TAB ——————————————————————————————————————————— */}
+          {/* —— PROGRAM TOTALS TAB ——————————————————————————————————— */}
           {tab === "summary" && (
             <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr>
                     <th style={S.thl}>Metric</th>
-                    <th style={S.th}>Year 1</th>
-                    <th style={S.th}>Year 2</th>
-                    <th style={S.th}>Year 3</th>
                     <th style={{ ...S.th, color: C.blue }}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {[
-                    ["Revenue", fmt(calc.y1.rev), fmt(calc.y2.rev), fmt(calc.y3.rev), fmt(calc.totRev), false],
-                    ["Cost of Sales", fmt(calc.y1.cos), fmt(calc.y2.cos), fmt(calc.y3.cos), fmt(calc.y1.cos+calc.y2.cos+calc.y3.cos), false],
-                    ["Gross Margin $", fmt(calc.y1.gm), fmt(calc.y2.gm), fmt(calc.y3.gm), fmt(calc.totGM), true],
-                    ["Gross Margin %", pct(calc.y1.gmPct), pct(calc.y2.gmPct), pct(calc.y3.gmPct), pct(calc.totGM/(calc.totRev||1)), true],
-                    ["Won Revenue (ICV)", calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.y1.wonRev) : "—", calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.y2.wonRev) : "—", calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.y3.wonRev) : "—", calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.y1.wonRev + calc.y2.wonRev + calc.y3.wonRev) : "—", false],
-                    ["Total SALs", fmtN(calc.y1.sals, 0), "—", "—", fmtN(calc.y1.sals, 0), false],
-                    ["Total SQLs", fmtN(calc.y1.sqls, 1), "—", "—", fmtN(calc.y1.sqls, 1), false],
-                    ["Total Deals Won", calc.hasClose ? fmtN(calc.y1.deals, 1) : "—", "—", "—", calc.hasClose ? fmtN(calc.y1.deals, 1) : "—", false],
-                    ["Pipeline Created", calc.hasACV ? fmt(calc.y1.pipeline) : "—", "—", "—", calc.hasACV ? fmt(calc.y1.pipeline) : "—", false],
-                  ].map(([label, v1, v2, v3, tot, isGM], i) => (
+                    ["Client Investment", fmt(calc.totalClientSpend)],
+                    ["Won Revenue (ICV)", calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totals.wonRev) : "—"],
+                    ["Pipeline Created", calc.hasACV ? fmt(calc.totals.pipeline) : "—"],
+                    ["Total Deals Won", calc.hasClose ? fmtN(calc.totals.deals, 1) : "—"],
+                    ["Total SALs", fmtN(calc.totals.sals, 0)],
+                    ["Total SQLs", fmtN(calc.totals.sqls, 1)],
+                  ].map(([label, tot], i) => (
                     <tr key={i} style={{ background: i % 2 === 0 ? C.white : C.bg }}>
                       <td style={S.tdl}>{label}</td>
-                      <td style={isGM ? gmTd(calc.y1.gm) : S.td}>{v1}</td>
-                      <td style={isGM ? gmTd(calc.y2.gm) : S.td}>{v2}</td>
-                      <td style={isGM ? gmTd(calc.y3.gm) : S.td}>{v3}</td>
-                      <td style={isGM ? gmTd(calc.totGM) : { ...S.td, color: C.blue, fontWeight: 700 }}>{tot}</td>
+                      <td style={{ ...S.td, color: C.blue, fontWeight: 700 }}>{tot}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -818,117 +750,42 @@ export default function PricingModel() {
             </div>
           )}
 
-          {/* —— MONTHLY TAB ——————————————————————————————————————————— */}
+          {/* —— MONTHLY CASHFLOW TAB ——————————————————————————————————— */}
           {tab === "monthly" && (
             <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "auto", maxHeight: 520, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
                   <tr>
                     <th style={S.thl}>Month</th>
-                    <th style={S.th}>Revenue</th>
-                    <th style={S.th}>COS</th>
-                    <th style={S.th}>GM $</th>
-                    <th style={S.th}>GM %</th>
-                    <th style={S.th}>Cum GM</th>
+                    <th style={S.th}>Client Spend</th>
+                    <th style={{ ...S.th, color: C.green }}>Won Revenue</th>
+                    <th style={S.th}>Cumulative Spend</th>
+                    <th style={{ ...S.th, color: C.green }}>Cumulative Won</th>
+                    <th style={S.th}>Net Position</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {calc.monthly.map((x, i) => (
-                    <tr key={i} style={{ background: i % 2 === 0 ? C.white : C.bg }}>
-                      <td style={S.tdl}>
-                        Mo {x.m}
-                        {x.m === 1 && <Badge color={C.blue}>YR1</Badge>}
-                        {!x.inProgram && <Badge color={C.amber} bg={C.amberLight}>tail</Badge>}
-                        {x.m === calc.breakEven && <Badge color={C.green} bg={C.greenLight}>break-even</Badge>}
-                      </td>
-                      <td style={S.td}>{fmt(x.revenue)}</td>
-                      <td style={S.td}>{fmt(x.cos)}</td>
-                      <td style={gmTd(x.gm)}>{fmt(x.gm)}</td>
-                      <td style={gmTd(x.gm)}>{pct(x.gmPct)}</td>
-                      <td style={gmTd(x.cumGM)}>{fmt(x.cumGM)}</td>
-                    </tr>
-                  ))}
+                  {calc.monthly.map((x, i) => {
+                    const net = (x.cumClientWon ?? 0) - (x.cumClientSpend ?? 0);
+                    return (
+                      <tr key={i} style={{ background: i % 2 === 0 ? C.white : C.bg }}>
+                        <td style={S.tdl}>
+                          Mo {x.m}
+                          {!x.inProgram && <Badge color={C.amber} bg={C.amberLight}>tail</Badge>}
+                          {x.m === calc.breakEven && <Badge color={C.green} bg={C.greenLight}>break-even</Badge>}
+                        </td>
+                        <td style={S.td}>{fmt(x.revenue)}</td>
+                        <td style={{ ...S.td, color: (x.wonDealValue ?? 0) > 0 ? C.green : C.textFaint, fontWeight: (x.wonDealValue ?? 0) > 0 ? 700 : 400 }}>
+                          {x.wonDealValue == null ? "—" : fmt(x.wonDealValue)}
+                        </td>
+                        <td style={S.td}>{fmt(x.cumClientSpend)}</td>
+                        <td style={{ ...S.td, color: C.green, fontWeight: 600 }}>{fmt(x.cumClientWon)}</td>
+                        <td style={{ ...S.td, color: net >= 0 ? C.green : "#dc2626", fontWeight: 700 }}>{fmt(net)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {/* —— PIPELINE TAB ——————————————————————————————————————————— */}
-          {tab === "pipeline" && (
-            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "auto", maxHeight: 520, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
-                  <tr>
-                    <th style={S.thl}>Month</th>
-                    <th style={S.th}>Total SALs</th>
-                    <th style={S.th}>Total SQLs</th>
-                    <th style={{ ...S.th, color: C.teal }}>Pipeline Created</th>
-                    <th style={S.th}>Deals Won</th>
-                    <th style={{ ...S.th, color: C.green }}>Won Deal Value (ICV)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {calc.monthly.map((x, i) => (
-                    <tr key={i} style={{ background: i % 2 === 0 ? C.white : C.bg }}>
-                      <td style={S.tdl}>Mo {x.m}{!x.inProgram && <Badge color={C.amber} bg={C.amberLight}>tail</Badge>}</td>
-                      <td style={S.td}>{x.inProgram ? fmtN(x.totalSals, 1) : "—"}</td>
-                      <td style={S.td}>{x.inProgram ? fmtN(x.totalSqls, 2) : "—"}</td>
-                      <td style={{ ...S.td, color: C.teal, fontWeight: 600 }}>{x.inProgram ? (x.pipelineCreated == null ? "—" : fmt(x.pipelineCreated)) : "—"}</td>
-                      <td style={S.td}>{x.inProgram ? (x.dealsWon == null ? "—" : fmtN(x.dealsWon, 2)) : "—"}</td>
-                      <td style={{ ...S.td, color: (x.wonDealValue ?? 0) > 0 ? C.green : C.textFaint, fontWeight: (x.wonDealValue ?? 0) > 0 ? 700 : 400 }}>
-                        {x.wonDealValue == null ? "—" : fmt(x.wonDealValue)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.border}`, background: C.bg, fontFamily: "monospace", fontSize: 12, display: "flex", gap: 24, flexWrap: "wrap" }}>
-                <div><span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10 }}>Total SALs </span><span style={{ fontWeight: 700 }}>{fmtN(calc.totalSalsSum, 0)}</span></div>
-                <div><span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10 }}>Total SQLs </span><span style={{ fontWeight: 700 }}>{fmtN(calc.totalSqlsSum, 1)}</span></div>
-                <div><span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10 }}>Total Pipeline </span><span style={{ color: C.teal, fontWeight: 700 }}>{calc.hasACV ? fmt(calc.totalPipelineCreated) : "—"}</span></div>
-                <div><span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10 }}>Total Deals Won </span><span style={{ fontWeight: 700 }}>{calc.hasClose ? fmtN(calc.totalDealsWon, 1) : "—"}</span></div>
-                <div><span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10 }}>Total Won Revenue </span><span style={{ color: C.green, fontWeight: 700 }}>{(calc.hasACV && calc.hasClose && calc.hasCycle) ? fmt(calc.totalWonDealValue) : "—"}</span></div>
-              </div>
-            </div>
-          )}
-
-          {/* —— ICV WATERFALL TAB ——————————————————————————————————————— */}
-          {tab === "icv" && (
-            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "auto", maxHeight: 520, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
-                  <tr>
-                    <th style={S.thl}>Month</th>
-                    <th style={S.th}>Deals Won</th>
-                    <th style={{ ...S.th, color: C.green }}>ICV Closed</th>
-                    <th style={S.th}>Cumulative ICV</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    let cumICV = 0;
-                    return calc.monthly.map((x, i) => {
-                      cumICV += (x.wonDealValue ?? 0);
-                      return (
-                        <tr key={i} style={{ background: i % 2 === 0 ? C.white : C.bg }}>
-                          <td style={S.tdl}>Mo {x.m}{!x.inProgram && <Badge color={C.amber} bg={C.amberLight}>tail</Badge>}</td>
-                          <td style={S.td}>{x.inProgram ? (x.dealsWon == null ? "—" : fmtN(x.dealsWon, 2)) : "—"}</td>
-                          <td style={{ ...S.td, color: (x.wonDealValue ?? 0) > 0 ? C.green : C.textFaint, fontWeight: (x.wonDealValue ?? 0) > 0 ? 700 : 400 }}>
-                            {x.wonDealValue == null ? "—" : fmt(x.wonDealValue)}
-                          </td>
-                          <td style={{ ...S.td, color: C.blue, fontWeight: 700 }}>{fmt(cumICV)}</td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-              <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.border}`, background: C.bg, fontFamily: "monospace", fontSize: 12, display: "flex", gap: 24, flexWrap: "wrap" }}>
-                <div><span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10 }}>Year 1 ICV </span><span style={{ color: C.green, fontWeight: 700 }}>{calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.y1.wonRev) : "—"}</span></div>
-                <div><span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10 }}>Year 2 (renewal) </span><span style={{ color: C.green, fontWeight: 700 }}>{calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.y2.wonRev) : "—"}</span></div>
-                <div><span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10 }}>Year 3 (renewal) </span><span style={{ color: C.green, fontWeight: 700 }}>{calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.y3.wonRev) : "—"}</span></div>
-                <div><span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10 }}>3-Year Total </span><span style={{ color: C.blue, fontWeight: 700 }}>{calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.y1.wonRev + calc.y2.wonRev + calc.y3.wonRev) : "—"}</span></div>
-              </div>
             </div>
           )}
 
