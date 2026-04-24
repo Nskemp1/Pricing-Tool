@@ -511,6 +511,7 @@ export default function PricingModel() {
                   { label: "Total SQLs", per: calc.steadySdrAvgSqls, color: "#0d9488", format: (v) => fmtN(v, 0), enabled: true },
                   { label: "Pipeline $", per: calc.steadySdrAvgPipeline, color: C.amber, format: (v) => fmt(v), enabled: calc.hasACV },
                   { label: "Deals Won", per: calc.steadySdrAvgWon, color: C.blue, format: (v) => fmtN(v, 1), enabled: calc.hasClose },
+                  { label: "Total Won ICV", per: calc.steadySdrAvgWon * (avgContractValue ?? 0), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
                 ]}
                 S={S}
               />
@@ -534,6 +535,7 @@ export default function PricingModel() {
                     { label: "Total SQLs", per: calc.steadyIsrAvgSqls, color: "#7c3aed", format: (v) => fmtN(v, 0), enabled: true },
                     { label: "Pipeline $", per: calc.steadyIsrAvgPipeline, color: C.amber, format: (v) => fmt(v), enabled: calc.hasACV },
                     { label: "Deals Won", per: calc.steadyIsrAvgWon, color: C.purple, format: (v) => fmtN(v, 1), enabled: calc.hasClose },
+                    { label: "Total Won ICV", per: calc.steadyIsrAvgWon * (avgContractValue ?? 0), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
                   ]}
                   S={S}
                 />
