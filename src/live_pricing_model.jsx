@@ -436,14 +436,13 @@ export default function PricingModel() {
 
           {/* Role legend */}
           <div style={{ fontSize: 10, color: C.textFaint, fontFamily: "monospace", marginBottom: 10, lineHeight: 1.6 }}>
-            <b style={{ color: C.teal }}>SDR</b> — outbound prospecting, books pipeline for AEs<br/>
-            <b style={{ color: C.purple }}>ISR</b> — inside sales rep, own outbound + closes<br/>
-            <b style={{ color: C.blue }}>AE</b> — account exec, closes SDR-sourced pipeline
+            <b style={{ color: C.teal }}>SDR</b> — Delivers meetings and opportunities<br/>
+            <b style={{ color: C.purple }}>ISR</b> — Nurtures and drives opportunities<br/>
+            <b style={{ color: C.blue }}>AE</b> — Closing Business
           </div>
 
           {/* ——— SDR TAB ——————————————————————————————————————— */}
           {role === "sdr" && <>
-            <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic", marginBottom: 8, lineHeight: 1.4 }}>SDR — Delivers meetings and opportunities</div>
             <Collapsible title="Program Setup" accent={C.teal} defaultOpen={true}>
               <Field label="SDR Headcount" value={sdrFTE} onChange={setSdrFTE} prefix="" />
               <Field label="SAL to SQL Rate" value={salToSqlRate == null ? null : salToSqlRate * 100} onChange={(v) => setSalToSqlRate(v == null ? null : v / 100)} prefix="" suffix="%" />
@@ -480,7 +479,6 @@ export default function PricingModel() {
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic", marginBottom: 8, lineHeight: 1.4 }}>ISR — Nurtures and drives opportunities</div>
               <Collapsible title="Program Setup" accent={C.purple} defaultOpen={true}>
                 <Field label="ISR Headcount" value={isrFTE} onChange={setIsrFTE} prefix="" />
                 <Field label="SAL to SQL Rate" value={salToSqlRate == null ? null : salToSqlRate * 100} onChange={(v) => setSalToSqlRate(v == null ? null : v / 100)} prefix="" suffix="%" />
@@ -522,7 +520,6 @@ export default function PricingModel() {
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic", marginBottom: 8, lineHeight: 1.4 }}>AE — Closing Business</div>
               <Collapsible title="Program Setup" accent={C.blue} defaultOpen={true}>
                 <Field label="AE Headcount" value={aeFTE} onChange={setAeFTE} prefix="" />
                 <Field label="SAL to SQL Rate" value={salToSqlRate == null ? null : salToSqlRate * 100} onChange={(v) => setSalToSqlRate(v == null ? null : v / 100)} prefix="" suffix="%" />
