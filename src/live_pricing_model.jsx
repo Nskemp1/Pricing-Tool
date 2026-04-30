@@ -131,12 +131,12 @@ function Collapsible({ title, defaultOpen = true, accent = C.blue, children }) {
 export default function PricingModel() {
   // Team
   const [aeFTE, setAeFTE] = useState(0);
-  const [sdrFTE, setSdrFTE] = useState(1);
+  const [sdrFTE, setSdrFTE] = useState(2);
   const [isrFTE, setIsrFTE] = useState(0);
 
   // Pricing
   const [priceAE, setPriceAE] = useState(13000);
-  const [priceSDR, setPriceSDR] = useState(11000);
+  const [priceSDR, setPriceSDR] = useState(11500);
   const [priceISR, setPriceISR] = useState(9500);
   const [discountAE, setDiscountAE] = useState(0);
   const [discountSDR, setDiscountSDR] = useState(0);
@@ -146,9 +146,9 @@ export default function PricingModel() {
 
   // Program-based ROI inputs (new)
   const [programLengthMonths, setProgramLengthMonths] = useState(6);
-  const [monthlyManagement, setMonthlyManagement] = useState(1000);
+  const [monthlyManagement, setMonthlyManagement] = useState(0);
   const [monthlyData, setMonthlyData] = useState(0);
-  const [salToSqlRate, setSalToSqlRate] = useState(0.53);
+  const [salToSqlRate, setSalToSqlRate] = useState(0.527);
   // Client inputs — defaulted to Excel ROI sheet values so sliders are live from first render.
   // Reps override these in conversation with the client.
   const [closeRate, setCloseRate] = useState(0.15);
@@ -249,7 +249,7 @@ export default function PricingModel() {
       const billingThisMonth = inProgram ? monthlyBilling : 0;
       const mgmtThisMonth = inProgram ? monthlyManagement : 0;
       const dataThisMonth = inProgram ? monthlyData : 0;
-      const setupThisMonth = m === 1 ? setupFee : 0;
+      const setupThisMonth = m === 1 ? setupFee * sdrFTE : 0;
       const revenue = billingThisMonth + mgmtThisMonth + dataThisMonth + variableRev + setupThisMonth;
 
       cumClientSpend += revenue;
@@ -443,17 +443,18 @@ export default function PricingModel() {
 
           {/* ——— SDR TAB ——————————————————————————————————————— */}
           {role === "sdr" && <>
+            <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic", marginBottom: 8, lineHeight: 1.4 }}>SDR — Delivers meetings and opportunities</div>
             <Collapsible title="Program Setup" accent={C.teal} defaultOpen={true}>
-              <Slider label="SDR Headcount" value={sdrFTE} min={0} max={20} onChange={setSdrFTE} color={C.teal} />
-              <Slider label="SAL to SQL Rate" value={salToSqlRate} min={0.1} max={1} step={0.01} onChange={setSalToSqlRate} format={pct} color={C.teal} />
-              <Slider label="Program Length (Months)" value={programLengthMonths} min={1} max={24} onChange={setProgramLengthMonths} color={C.amber} />
+              <Field label="SDR Headcount" value={sdrFTE} onChange={setSdrFTE} prefix="" />
+              <Field label="SAL to SQL Rate" value={salToSqlRate == null ? null : salToSqlRate * 100} onChange={(v) => setSalToSqlRate(v == null ? null : v / 100)} prefix="" suffix="%" />
+              <Field label="Program Length (Months)" value={programLengthMonths} onChange={setProgramLengthMonths} prefix="" />
             </Collapsible>
 
             <Collapsible title="SDR Costs" accent={C.teal} defaultOpen={true}>
               <Field label="Price per SDR / month" value={priceSDR} onChange={setPriceSDR} />
-              <Field label="SDR Discount" value={discountSDR} onChange={setDiscountSDR} prefix="" suffix="%" />
               <div style={{ fontFamily: "monospace", fontSize: 11, color: C.teal, marginBottom: 10, background: C.tealLight, borderRadius: 5, padding: "4px 8px" }}>End price: {fmt(calc.endSDR)}/mo</div>
-              <Field label="One-Time Program & Tech Setup" value={setupFee} onChange={setSetupFee} />
+              <Field label="One Time Setup Fee per SDR" value={setupFee} onChange={setSetupFee} />
+              <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, marginTop: -6, marginBottom: 10 }}>Total: {fmt(setupFee * sdrFTE)} ({sdrFTE} SDR × {fmt(setupFee)})</div>
               <Field label="Monthly Management" value={monthlyManagement} onChange={setMonthlyManagement} />
               <Field label="Monthly Data" value={monthlyData} onChange={setMonthlyData} />
             </Collapsible>
@@ -479,10 +480,11 @@ export default function PricingModel() {
             </div>
           ) : (
             <>
+              <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic", marginBottom: 8, lineHeight: 1.4 }}>ISR — Nurtures and drives opportunities</div>
               <Collapsible title="Program Setup" accent={C.purple} defaultOpen={true}>
-                <Slider label="ISR Headcount" value={isrFTE} min={0} max={20} onChange={setIsrFTE} color={C.purple} />
-                <Slider label="SAL to SQL Rate" value={salToSqlRate} min={0.1} max={1} step={0.01} onChange={setSalToSqlRate} format={pct} color={C.purple} />
-                <Slider label="Program Length (Months)" value={programLengthMonths} min={1} max={24} onChange={setProgramLengthMonths} color={C.amber} />
+                <Field label="ISR Headcount" value={isrFTE} onChange={setIsrFTE} prefix="" />
+                <Field label="SAL to SQL Rate" value={salToSqlRate == null ? null : salToSqlRate * 100} onChange={(v) => setSalToSqlRate(v == null ? null : v / 100)} prefix="" suffix="%" />
+                <Field label="Program Length (Months)" value={programLengthMonths} onChange={setProgramLengthMonths} prefix="" />
               </Collapsible>
 
               <Collapsible title="ISR Costs" accent={C.purple} defaultOpen={true}>
@@ -520,10 +522,11 @@ export default function PricingModel() {
             </div>
           ) : (
             <>
+              <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic", marginBottom: 8, lineHeight: 1.4 }}>AE — Closing Business</div>
               <Collapsible title="Program Setup" accent={C.blue} defaultOpen={true}>
-                <Slider label="AE Headcount" value={aeFTE} min={0} max={20} onChange={setAeFTE} color={C.blue} />
-                <Slider label="SAL to SQL Rate" value={salToSqlRate} min={0.1} max={1} step={0.01} onChange={setSalToSqlRate} format={pct} color={C.blue} />
-                <Slider label="Program Length (Months)" value={programLengthMonths} min={1} max={24} onChange={setProgramLengthMonths} color={C.amber} />
+                <Field label="AE Headcount" value={aeFTE} onChange={setAeFTE} prefix="" />
+                <Field label="SAL to SQL Rate" value={salToSqlRate == null ? null : salToSqlRate * 100} onChange={(v) => setSalToSqlRate(v == null ? null : v / 100)} prefix="" suffix="%" />
+                <Field label="Program Length (Months)" value={programLengthMonths} onChange={setProgramLengthMonths} prefix="" />
               </Collapsible>
 
               <Collapsible title="AE Costs" accent={C.blue} defaultOpen={true}>
