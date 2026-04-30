@@ -581,7 +581,7 @@ export default function PricingModel() {
             const roiNum = roiReady ? calc.totalWonDealValue / calc.totalClientSpend : null;
             const roiDisplay = roiNum == null ? "—" : (Math.round(roiNum * 10) / 10) + "x";
             return (
-              <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
                 <KPI ref={monthlyKpiRef} label="Monthly Billing" value={fmt(calc.monthlyClientBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR + mgmt + data`} color={C.blue} bg={C.blueLight} border={C.blueBorder} />
                 <KPI label="Total Client Investment" value={fmt(calc.totalClientSpend)} sub="Program total (billing + fees + setup)" style={kpiWidth ? { width: kpiWidth } : undefined} />
                 <KPI label="Total Won Revenue" value={calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"} sub="ICV closed from program pipeline" color={C.green} style={kpiWidth ? { width: kpiWidth } : undefined} />
