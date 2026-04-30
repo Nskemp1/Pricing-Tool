@@ -712,7 +712,7 @@ export default function PricingModel() {
                   ))}
                 </tr>
                 <tr style={{ background: C.bg }}>
-                  <td style={S.tdl}>Total SQLs <span style={{ color: C.textFaint, fontWeight: 400 }}>({pct(salToSqlRate)} SAL→SQL)</span></td>
+                  <td style={S.tdl}>Total SQLs <span style={{ color: C.textFaint, fontWeight: 400 }}>({pct(salToSqlRate)})</span></td>
                   {calc.monthly.map((o) => (
                     <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.totalSqls, 2) : "—"}</td>
                   ))}
@@ -726,7 +726,7 @@ export default function PricingModel() {
                   ))}
                 </tr>
                 <tr style={{ background: C.bg }}>
-                  <td style={S.tdl}>Total Deals Won <span style={{ color: C.textFaint, fontWeight: 400 }}>({calc.hasClose ? pct(closeRate) : "close rate"} close)</span></td>
+                  <td style={S.tdl}>Total Deals Won <span style={{ color: C.textFaint, fontWeight: 400 }}>({calc.hasClose ? pct(closeRate) : "close rate"})</span></td>
                   {calc.monthly.map((o) => (
                     <td key={o.m} style={{ ...S.td, color: (o.wonDealsCount ?? 0) > 0 ? C.blue : C.textFaint, fontWeight: (o.wonDealsCount ?? 0) > 0 ? 700 : 400 }}>
                       {o.wonDealsCount == null ? "—" : fmtN(o.wonDealsCount, 2)}
