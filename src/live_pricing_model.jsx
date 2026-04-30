@@ -152,7 +152,7 @@ export default function PricingModel() {
   // Client inputs — defaulted to Excel ROI sheet values so sliders are live from first render.
   // Reps override these in conversation with the client.
   const [closeRate, setCloseRate] = useState(0.15);
-  const [avgContractValue, setAvgContractValue] = useState(14000);
+  const [avgContractValue, setAvgContractValue] = useState(50000);
   const [avgSalesCycleMonths, setAvgSalesCycleMonths] = useState(6);
   const [ramp, setRamp] = useState([3, 6, 8, 12, 12, 12]);
   const [isrRamp, setIsrRamp] = useState([3, 6, 8, 12, 12, 12]);
@@ -712,13 +712,13 @@ export default function PricingModel() {
                   ))}
                 </tr>
                 <tr style={{ background: C.bg }}>
-                  <td style={S.tdl}>Total SQLs</td>
+                  <td style={S.tdl}>Total SQLs <span style={{ color: C.textFaint, fontWeight: 400 }}>({pct(salToSqlRate)} SAL→SQL)</span></td>
                   {calc.monthly.map((o) => (
                     <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.totalSqls, 2) : "—"}</td>
                   ))}
                 </tr>
                 <tr>
-                  <td style={S.tdl}>Total Pipeline Created</td>
+                  <td style={S.tdl}>Total Pipeline Created <span style={{ color: C.textFaint, fontWeight: 400 }}>({calc.hasACV ? fmt(avgContractValue) : "ACV"})</span></td>
                   {calc.monthly.map((o) => (
                     <td key={o.m} style={{ ...S.td, color: o.inProgram ? C.teal : C.textFaint }}>
                       {o.inProgram ? (o.pipelineCreated == null ? "—" : fmt(o.pipelineCreated)) : "—"}
@@ -726,7 +726,7 @@ export default function PricingModel() {
                   ))}
                 </tr>
                 <tr style={{ background: C.bg }}>
-                  <td style={S.tdl}>Total Deals Won</td>
+                  <td style={S.tdl}>Total Deals Won <span style={{ color: C.textFaint, fontWeight: 400 }}>({calc.hasClose ? pct(closeRate) : "close rate"} close)</span></td>
                   {calc.monthly.map((o) => (
                     <td key={o.m} style={{ ...S.td, color: (o.wonDealsCount ?? 0) > 0 ? C.blue : C.textFaint, fontWeight: (o.wonDealsCount ?? 0) > 0 ? 700 : 400 }}>
                       {o.wonDealsCount == null ? "—" : fmtN(o.wonDealsCount, 2)}
@@ -734,7 +734,7 @@ export default function PricingModel() {
                   ))}
                 </tr>
                 <tr>
-                  <td style={{ ...S.tdl, fontWeight: 700, color: C.text }}>Won Deal Value (ICV)</td>
+                  <td style={{ ...S.tdl, fontWeight: 700, color: C.text }}>Total Revenue Closed Won (Per Month)</td>
                   {calc.monthly.map((o) => (
                     <td key={o.m} style={{ ...S.td, color: (o.wonDealValue ?? 0) > 0 ? C.green : C.textFaint, fontWeight: (o.wonDealValue ?? 0) > 0 ? 700 : 400 }}>
                       {o.wonDealValue == null ? "—" : fmt(o.wonDealValue)}
@@ -742,7 +742,7 @@ export default function PricingModel() {
                   ))}
                 </tr>
                 <tr style={{ background: C.bg }}>
-                  <td style={{ ...S.tdl, fontWeight: 700, color: C.blue }}>Cumulative ICV</td>
+                  <td style={{ ...S.tdl, fontWeight: 700, color: C.blue }}>Total Revenue Closed Won (Cumulative)</td>
                   {(() => {
                     let cumICV = 0;
                     return calc.monthly.map((o) => {
@@ -759,7 +759,7 @@ export default function PricingModel() {
             </table>
             <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 24, flexWrap: "wrap", background: C.bg, fontFamily: "monospace", fontSize: 12 }}>
               <div>
-                <span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10, letterSpacing: "0.08em" }}>Total Pipeline</span>{" "}
+                <span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10, letterSpacing: "0.08em" }}>Total Pipeline Created</span>{" "}
                 <span style={{ color: C.teal, fontWeight: 700 }}>{calc.hasACV ? fmt(calc.totalPipelineCreated) : "—"}</span>
               </div>
               <div>
@@ -767,7 +767,7 @@ export default function PricingModel() {
                 <span style={{ color: C.blue, fontWeight: 700 }}>{calc.hasClose ? fmtN(calc.totalDealsWon, 1) : "—"}</span>
               </div>
               <div>
-                <span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10, letterSpacing: "0.08em" }}>Total Won Revenue</span>{" "}
+                <span style={{ color: C.textFaint, textTransform: "uppercase", fontSize: 10, letterSpacing: "0.08em" }}>Total Revenue Won</span>{" "}
                 <span style={{ color: C.green, fontWeight: 700 }}>{calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"}</span>
               </div>
             </div>

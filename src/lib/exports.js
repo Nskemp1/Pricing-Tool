@@ -97,10 +97,10 @@ function sheetExpectedOutcomes(calc, inputs) {
   rows.push(["Total SQLs", ...months.map((o) => o.inProgram ? o.totalSqls : null)]);
   rows.push(["Pipeline Created", ...months.map((o) => o.inProgram ? (o.pipelineCreated ?? null) : null)]);
   rows.push(["Total Deals Won", ...months.map((o) => o.wonDealsCount ?? null)]);
-  rows.push(["Won Deal Value (ICV)", ...months.map((o) => o.wonDealValue ?? null)]);
+  rows.push(["Total Revenue Closed Won (Per Month)", ...months.map((o) => o.wonDealValue ?? null)]);
 
   let cumICV = 0;
-  rows.push(["Cumulative ICV", ...months.map((o) => {
+  rows.push(["Total Revenue Closed Won (Cumulative)", ...months.map((o) => {
     cumICV += (o.wonDealValue ?? 0);
     return o.wonDealValue == null ? null : cumICV;
   })]);
