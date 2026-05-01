@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useLayoutEffect, forwardRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { exportToExcel, exportToPdf } from "./lib/exports";
 
 const fmt = (n) => n == null || isNaN(n) || !isFinite(n) ? "—" : "$" + Math.round(n).toLocaleString("en-US");
@@ -51,15 +51,15 @@ function Field({ label, value, onChange, prefix = "$", suffix = "", placeholder 
   );
 }
 
-const KPI = forwardRef(function KPI({ label, value, sub, color = C.text, bg = C.bg, border = C.border, style }, ref) {
+function KPI({ label, value, sub, color = C.text, bg = C.bg, border = C.border }) {
   return (
-    <div ref={ref} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "11px 14px", ...style }}>
+    <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "11px 14px" }}>
       <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 19, fontWeight: 800, color, letterSpacing: "-0.5px", lineHeight: 1.1 }}>{value}</div>
       {sub && <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, marginTop: 3 }}>{sub}</div>}
     </div>
   );
-});
+}
 
 function ProjectionTable({ rows, S }) {
   const milestones = [
@@ -165,16 +165,6 @@ export default function PricingModel() {
   const exportMenuRef = useRef(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(null); // null | "xlsx" | "pdf"
-
-  // KPI row width sync: Monthly Billing has the longest natural width (driven
-  // by its FTE/mgmt/data sub-line). Measure it and apply that width to every
-  // other KPI so all five boxes are the same size.
-  const monthlyKpiRef = useRef(null);
-  const [kpiWidth, setKpiWidth] = useState(null);
-  useLayoutEffect(() => {
-    if (!monthlyKpiRef.current) return;
-    setKpiWidth(monthlyKpiRef.current.offsetWidth);
-  }, [aeFTE, sdrFTE, isrFTE]);
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -581,12 +571,12 @@ export default function PricingModel() {
             const roiNum = roiReady ? calc.totalWonDealValue / calc.totalClientSpend : null;
             const roiDisplay = roiNum == null ? "—" : (Math.round(roiNum * 10) / 10) + "x";
             return (
-              <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-                <KPI ref={monthlyKpiRef} label="Monthly Billing" value={fmt(calc.monthlyClientBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR + mgmt + data`} color={C.blue} bg={C.blueLight} border={C.blueBorder} />
-                <KPI label="Total Client Investment" value={fmt(calc.totalClientSpend)} sub="Program total (billing + fees + setup)" style={kpiWidth ? { width: kpiWidth } : undefined} />
-                <KPI label="Total Won Revenue" value={calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"} sub="ICV closed from program pipeline" color={C.green} style={kpiWidth ? { width: kpiWidth } : undefined} />
-                <KPI label="ROI" value={roiDisplay} sub="Won revenue ÷ client investment" color={C.purple} bg={C.purpleLight} border={C.purpleBorder} style={kpiWidth ? { width: kpiWidth } : undefined} />
-                <KPI label="Client Break-even" value={calc.breakEven > 0 ? `Month ${calc.breakEven}` : "—"} sub="Won rev ≥ client spend" color={C.amber} style={kpiWidth ? { width: kpiWidth } : undefined} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 16 }}>
+                <KPI label="Monthly Billing" value={fmt(calc.monthlyClientBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR + mgmt + data`} color={C.blue} bg={C.blueLight} border={C.blueBorder} />
+                <KPI label="Total Client Investment" value={fmt(calc.totalClientSpend)} sub="Program total (billing + fees + setup)" />
+                <KPI label="Total Won Revenue" value={calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"} sub="ICV closed from program pipeline" color={C.green} />
+                <KPI label="ROI" value={roiDisplay} sub="Won revenue ÷ client investment" color={C.purple} bg={C.purpleLight} border={C.purpleBorder} />
+                <KPI label="Client Break-even" value={calc.breakEven > 0 ? `Month ${calc.breakEven}` : "—"} sub="Won rev ≥ client spend" color={C.amber} />
               </div>
             );
           })()}
