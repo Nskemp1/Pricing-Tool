@@ -157,6 +157,44 @@ const PAGE_MARGIN = 36;
 const HEADER_HEIGHT = 64;
 const SECTION_BAR_HEIGHT = 26;
 
+// html2canvas doesn't reliably render <input> values, so swap each input with a
+// styled <span> showing the same text for the duration of the capture.
+function freezeInputs(element) {
+  const inputs = element.querySelectorAll("input");
+  const restorers = [];
+  inputs.forEach((input) => {
+    const cs = window.getComputedStyle(input);
+    const span = document.createElement("span");
+    span.textContent = input.value || "";
+    span.style.cssText = `
+      display: inline-block;
+      box-sizing: border-box;
+      width: ${input.offsetWidth}px;
+      height: ${input.offsetHeight}px;
+      line-height: ${input.offsetHeight}px;
+      padding: 0 ${cs.paddingRight} 0 ${cs.paddingLeft};
+      background: ${cs.backgroundColor};
+      border: ${cs.borderTopWidth} solid ${cs.borderTopColor};
+      border-radius: ${cs.borderRadius};
+      color: ${cs.color};
+      font: ${cs.font};
+      font-family: ${cs.fontFamily};
+      font-size: ${cs.fontSize};
+      font-weight: ${cs.fontWeight};
+      text-align: ${cs.textAlign === "start" ? "right" : cs.textAlign};
+      vertical-align: middle;
+    `;
+    const prevDisplay = input.style.display;
+    input.style.display = "none";
+    input.parentNode.insertBefore(span, input);
+    restorers.push(() => {
+      span.parentNode.removeChild(span);
+      input.style.display = prevDisplay;
+    });
+  });
+  return () => restorers.forEach((r) => r());
+}
+
 async function captureCanvas(element, html2canvas) {
   const prev = {
     overflow: element.style.overflow,
@@ -166,6 +204,7 @@ async function captureCanvas(element, html2canvas) {
   element.style.overflow = "visible";
   element.style.height = "auto";
   element.style.maxHeight = "none";
+  const restoreInputs = freezeInputs(element);
   try {
     return await html2canvas(element, {
       scale: PDF_SCALE,
@@ -175,6 +214,7 @@ async function captureCanvas(element, html2canvas) {
       windowHeight: element.scrollHeight,
     });
   } finally {
+    restoreInputs();
     element.style.overflow = prev.overflow;
     element.style.height = prev.height;
     element.style.maxHeight = prev.maxHeight;
