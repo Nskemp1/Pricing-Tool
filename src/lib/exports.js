@@ -152,16 +152,12 @@ export async function exportToExcel(calc, inputs) {
 // PDF
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function exportToPdf(element, inputs) {
-  if (!element) throw new Error("No element to capture");
+const PDF_SCALE = 3;
+const PAGE_MARGIN = 36;
+const HEADER_HEIGHT = 64;
+const SECTION_BAR_HEIGHT = 26;
 
-  const [{ jsPDF }, html2canvasMod] = await Promise.all([
-    import("jspdf"),
-    import("html2canvas"),
-  ]);
-  const html2canvas = html2canvasMod.default;
-
-  // Temporarily expand the scrollable container so html2canvas captures the full content.
+async function captureCanvas(element, html2canvas) {
   const prev = {
     overflow: element.style.overflow,
     height: element.style.height,
@@ -170,11 +166,9 @@ export async function exportToPdf(element, inputs) {
   element.style.overflow = "visible";
   element.style.height = "auto";
   element.style.maxHeight = "none";
-
-  let canvas;
   try {
-    canvas = await html2canvas(element, {
-      scale: 2,
+    return await html2canvas(element, {
+      scale: PDF_SCALE,
       backgroundColor: "#ffffff",
       logging: false,
       windowWidth: element.scrollWidth,
@@ -185,44 +179,128 @@ export async function exportToPdf(element, inputs) {
     element.style.height = prev.height;
     element.style.maxHeight = prev.maxHeight;
   }
+}
 
-  // Letter portrait, 36pt margins.
+function teamLine(inputs) {
+  const parts = [
+    inputs.aeFTE > 0 && `${inputs.aeFTE} AE`,
+    inputs.sdrFTE > 0 && `${inputs.sdrFTE} SDR`,
+    inputs.isrFTE > 0 && `${inputs.isrFTE} ISR`,
+  ].filter(Boolean);
+  const team = parts.length ? parts.join(" · ") : "No reps configured";
+  return `${team} · ${inputs.programLengthMonths}mo program`;
+}
+
+function drawHeader(pdf, inputs, pageW) {
+  // Title
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(18);
+  pdf.setTextColor(29, 78, 216); // C.blue
+  pdf.text("MemoryBlue Pricing Proposal", PAGE_MARGIN, PAGE_MARGIN + 14);
+
+  // Subtitle
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(10);
+  pdf.setTextColor(100, 116, 139); // C.textLight
+  pdf.text(`Generated ${todayStamp()} · ${teamLine(inputs)}`, PAGE_MARGIN, PAGE_MARGIN + 32);
+
+  // Divider
+  pdf.setDrawColor(226, 232, 240); // C.border
+  pdf.setLineWidth(0.5);
+  pdf.line(PAGE_MARGIN, PAGE_MARGIN + 44, pageW - PAGE_MARGIN, PAGE_MARGIN + 44);
+
+  return PAGE_MARGIN + HEADER_HEIGHT;
+}
+
+function drawSectionBar(pdf, label, accent, x, y) {
+  // Accent bar on left
+  pdf.setFillColor(...accent);
+  pdf.rect(x, y, 4, 18, "F");
+  // Label
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(12);
+  pdf.setTextColor(15, 23, 42); // C.text
+  pdf.text(label, x + 12, y + 13);
+  return y + SECTION_BAR_HEIGHT;
+}
+
+function placeCanvas(pdf, canvas, startY, pageW, pageH) {
+  const usableW = pageW - PAGE_MARGIN * 2;
+  const ratio = usableW / canvas.width;
+  const scaledFullH = canvas.height * ratio;
+  const usableH = pageH - PAGE_MARGIN - startY;
+
+  if (scaledFullH <= usableH) {
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", PAGE_MARGIN, startY, usableW, scaledFullH);
+    return;
+  }
+
+  // Paginate. First slice fits in (pageH - startY - margin); subsequent slices use full usable height.
+  const sliceCanvas = document.createElement("canvas");
+  sliceCanvas.width = canvas.width;
+  const ctx = sliceCanvas.getContext("2d");
+
+  let y = 0;
+  let isFirst = true;
+  while (y < canvas.height) {
+    const availPdfH = isFirst ? usableH : (pageH - PAGE_MARGIN * 2);
+    const sliceCanvasH = Math.floor(availPdfH / ratio);
+    const remaining = canvas.height - y;
+    const thisH = Math.min(sliceCanvasH, remaining);
+    sliceCanvas.height = thisH;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, sliceCanvas.width, thisH);
+    ctx.drawImage(canvas, 0, y, canvas.width, thisH, 0, 0, canvas.width, thisH);
+
+    if (!isFirst) pdf.addPage();
+    const drawY = isFirst ? startY : PAGE_MARGIN;
+    pdf.addImage(sliceCanvas.toDataURL("image/png"), "PNG", PAGE_MARGIN, drawY, usableW, thisH * ratio);
+
+    y += thisH;
+    isFirst = false;
+  }
+}
+
+export async function exportToPdf(element, inputs, opts = {}) {
+  if (!element) throw new Error("No element to capture");
+  const { setTabAndWait, originalTab, tabs } = opts;
+
+  const [{ jsPDF }, html2canvasMod] = await Promise.all([
+    import("jspdf"),
+    import("html2canvas"),
+  ]);
+  const html2canvas = html2canvasMod.default;
+
+  // Capture each tab (or just the current view if no tab cycling provided).
+  const captures = [];
+  if (setTabAndWait && tabs && tabs.length) {
+    for (const t of tabs) {
+      await setTabAndWait(t.key);
+      const canvas = await captureCanvas(element, html2canvas);
+      captures.push({ label: t.label, accent: t.accent, canvas });
+    }
+    if (originalTab !== undefined) await setTabAndWait(originalTab);
+  } else {
+    const canvas = await captureCanvas(element, html2canvas);
+    captures.push({ label: null, canvas });
+  }
+
+  // Build PDF.
   const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
-  const margin = 36;
-  const usableW = pageW - margin * 2;
-  const usableH = pageH - margin * 2;
 
-  // Scale canvas to fit width, then paginate vertically.
-  const ratio = usableW / canvas.width;
-  const scaledFullH = canvas.height * ratio;
-
-  if (scaledFullH <= usableH) {
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, usableW, scaledFullH);
-  } else {
-    // Slice the canvas into page-height chunks.
-    const sliceCanvasH = Math.floor(usableH / ratio); // canvas pixels per page
-    const sliceCanvas = document.createElement("canvas");
-    sliceCanvas.width = canvas.width;
-    sliceCanvas.height = sliceCanvasH;
-    const ctx = sliceCanvas.getContext("2d");
-
-    let y = 0;
-    let firstPage = true;
-    while (y < canvas.height) {
-      const remaining = canvas.height - y;
-      const thisH = Math.min(sliceCanvasH, remaining);
-      sliceCanvas.height = thisH;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, sliceCanvas.width, thisH);
-      ctx.drawImage(canvas, 0, y, canvas.width, thisH, 0, 0, canvas.width, thisH);
-      const imgData = sliceCanvas.toDataURL("image/png");
-      if (!firstPage) pdf.addPage();
-      firstPage = false;
-      pdf.addImage(imgData, "PNG", margin, margin, usableW, thisH * ratio);
-      y += thisH;
+  let y = drawHeader(pdf, inputs, pageW);
+  for (let i = 0; i < captures.length; i++) {
+    if (i > 0) {
+      pdf.addPage();
+      y = PAGE_MARGIN;
     }
+    if (captures[i].label) {
+      const accent = captures[i].accent || [29, 78, 216]; // default C.blue rgb
+      y = drawSectionBar(pdf, captures[i].label, accent, PAGE_MARGIN, y);
+    }
+    placeCanvas(pdf, captures[i].canvas, y, pageW, pageH);
   }
 
   pdf.save(buildFilename(inputs, "pdf"));

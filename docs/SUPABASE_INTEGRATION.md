@@ -1,10 +1,12 @@
 # Supabase Integration — Historical Reference
 
-This file documents the Supabase-backed data integration that the Pricing Tool USED to depend on for its ROI calculator. The data-plane integration has been intentionally removed from the live tool because the sales rep now enters every relevant input (SAL→SQL rate, close rate, ACV, sales cycle, ramp) directly. Supabase is retained **only** as the authentication gate.
+This file documents the Supabase-backed data integration that the Pricing Tool USED to depend on for its ROI calculator. The data-plane integration was removed earlier because the sales rep now enters every relevant input (SAL→SQL rate, close rate, ACV, sales cycle, ramp) directly.
 
-This document is a complete record so that the integration can be reconstructed later if needed (e.g., for the post-close "actual vs projected" tracking feature).
+**As of May 2026 the auth gate has also been removed**, completing the Supabase decoupling. The tool no longer depends on Supabase at all — `@supabase/supabase-js` was uninstalled, `src/lib/supabase.js` and `src/components/pricing/LoginPage.jsx` were deleted, and `live_App.jsx` now renders the pricing model directly with no session check. The two `VITE_SUPABASE_*` environment variables in Vercel are unused (cosmetic; can be deleted from Project → Settings → Environment Variables).
 
-**Last verified:** April 2026
+This document is retained as a complete reconstruction reference if a data integration is ever rebuilt (e.g., for post-close "actual vs projected" tracking).
+
+**Last verified:** April 2026 (auth removed May 2026)
 
 ---
 

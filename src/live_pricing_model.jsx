@@ -390,8 +390,22 @@ export default function PricingModel() {
                           closeRate, avgContractValue, avgSalesCycleMonths,
                           programLengthMonths, ramp, isrRamp,
                         };
-                        if (key === "xlsx") await exportToExcel(calc, inputs);
-                        else await exportToPdf(mainRef.current, inputs);
+                        if (key === "xlsx") {
+                          await exportToExcel(calc, inputs);
+                        } else {
+                          const setTabAndWait = (newTab) => new Promise((resolve) => {
+                            setTab(newTab);
+                            requestAnimationFrame(() => requestAnimationFrame(resolve));
+                          });
+                          await exportToPdf(mainRef.current, inputs, {
+                            setTabAndWait,
+                            originalTab: tab,
+                            tabs: [
+                              { key: "summary", label: "Program Totals", accent: [29, 78, 216] },
+                              { key: "monthly", label: "Monthly Cashflow", accent: [16, 185, 129] },
+                            ],
+                          });
+                        }
                       } catch (err) {
                         console.error("Export failed:", err);
                         alert(`Export failed: ${err.message}`);
