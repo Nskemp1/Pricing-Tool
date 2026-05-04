@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef, useEffect } from "react";
-import { exportToExcel, exportToPdf } from "./lib/exports";
+import { useState, useMemo, useRef } from "react";
+import { exportToPdf } from "./lib/exports";
 
 const fmt = (n) => n == null || isNaN(n) || !isFinite(n) ? "—" : "$" + Math.round(n).toLocaleString("en-US");
 const fmtN = (n, dp = 1) => n == null || isNaN(n) ? "—" : Number(n).toFixed(dp);
@@ -160,22 +160,9 @@ export default function PricingModel() {
   const [tab, setTab] = useState("summary");
   const [role, setRole] = useState("sdr"); // sdr | isr | ae
 
-  // Export dropdown
+  // PDF export
   const mainRef = useRef(null);
-  const exportMenuRef = useRef(null);
-  const [exportOpen, setExportOpen] = useState(false);
-  const [exporting, setExporting] = useState(null); // null | "xlsx" | "pdf"
-
-  useEffect(() => {
-    if (!exportOpen) return;
-    const onDown = (e) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) setExportOpen(false);
-    };
-    const onKey = (e) => { if (e.key === "Escape") setExportOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
-  }, [exportOpen]);
+  const [exporting, setExporting] = useState(null); // null | "pdf"
 
   // —— CALCULATIONS ————————————————————————————————————————————————————————
   const calc = useMemo(() => {
@@ -355,78 +342,47 @@ export default function PricingModel() {
           <span style={{ fontFamily: "monospace", fontSize: 11, color: C.green, fontWeight: 700 }}>Won: {calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"}</span>
           <span style={{ fontFamily: "monospace", fontSize: 11, color: C.textLight }}>Break-even: {calc.breakEven > 0 ? `Mo ${calc.breakEven}` : "—"}</span>
 
-          {/* Export dropdown */}
-          <div ref={exportMenuRef} style={{ position: "relative" }}>
-            <button
-              onClick={() => setExportOpen((o) => !o)}
-              disabled={exporting !== null}
-              style={{
-                fontFamily: "monospace", fontSize: 11, fontWeight: 700,
-                padding: "5px 10px", border: `1px solid ${C.blueBorder}`,
-                borderRadius: 5, background: exporting ? C.bg : C.blueLight, color: C.blue,
-                cursor: exporting ? "default" : "pointer", display: "flex", alignItems: "center", gap: 5,
-              }}
-            >
-              {exporting === "xlsx" ? "Generating Excel…" : exporting === "pdf" ? "Generating PDF…" : <>Export <span style={{ fontSize: 9 }}>▾</span></>}
-            </button>
-            {exportOpen && exporting === null && (
-              <div style={{
-                position: "absolute", top: "100%", right: 0, marginTop: 4, minWidth: 150,
-                background: C.white, border: `1px solid ${C.border}`, borderRadius: 6,
-                boxShadow: "0 4px 12px rgba(0,0,0,0.08)", overflow: "hidden", zIndex: 100,
-              }}>
-                {[["xlsx", "Excel (.xlsx)"], ["pdf", "PDF"]].map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={async () => {
-                      setExportOpen(false);
-                      setExporting(key);
-                      try {
-                        const inputs = {
-                          aeFTE, sdrFTE, isrFTE,
-                          priceAE, priceSDR, priceISR,
-                          discountAE, discountSDR, discountISR,
-                          setupFee, monthlyManagement, monthlyData,
-                          closeRate, avgContractValue, avgSalesCycleMonths,
-                          programLengthMonths, ramp, isrRamp,
-                        };
-                        if (key === "xlsx") {
-                          await exportToExcel(calc, inputs);
-                        } else {
-                          const setTabAndWait = (newTab) => new Promise((resolve) => {
-                            setTab(newTab);
-                            requestAnimationFrame(() => requestAnimationFrame(resolve));
-                          });
-                          await exportToPdf(mainRef.current, inputs, {
-                            setTabAndWait,
-                            originalTab: tab,
-                            tabs: [
-                              { key: "summary", label: "Program Totals", accent: [29, 78, 216] },
-                              { key: "monthly", label: "Monthly Cashflow", accent: [16, 185, 129] },
-                            ],
-                          });
-                        }
-                      } catch (err) {
-                        console.error("Export failed:", err);
-                        alert(`Export failed: ${err.message}`);
-                      } finally {
-                        setExporting(null);
-                      }
-                    }}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left",
-                      padding: "8px 12px", border: "none", background: C.white,
-                      fontFamily: "monospace", fontSize: 11, color: C.text, cursor: "pointer",
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = C.bg}
-                    onMouseLeave={(e) => e.currentTarget.style.background = C.white}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Export PDF button */}
+          <button
+            onClick={async () => {
+              setExporting("pdf");
+              try {
+                const inputs = {
+                  aeFTE, sdrFTE, isrFTE,
+                  priceAE, priceSDR, priceISR,
+                  discountAE, discountSDR, discountISR,
+                  setupFee, monthlyManagement, monthlyData,
+                  closeRate, avgContractValue, avgSalesCycleMonths,
+                  programLengthMonths, ramp, isrRamp,
+                };
+                const setTabAndWait = (newTab) => new Promise((resolve) => {
+                  setTab(newTab);
+                  requestAnimationFrame(() => requestAnimationFrame(resolve));
+                });
+                await exportToPdf(mainRef.current, inputs, {
+                  setTabAndWait,
+                  originalTab: tab,
+                  tabs: [
+                    { key: "summary", label: "Program Totals", accent: [29, 78, 216] },
+                  ],
+                });
+              } catch (err) {
+                console.error("Export failed:", err);
+                alert(`Export failed: ${err.message}`);
+              } finally {
+                setExporting(null);
+              }
+            }}
+            disabled={exporting !== null}
+            style={{
+              fontFamily: "monospace", fontSize: 11, fontWeight: 700,
+              padding: "5px 10px", border: `1px solid ${C.blueBorder}`,
+              borderRadius: 5, background: exporting ? C.bg : C.blueLight, color: C.blue,
+              cursor: exporting ? "default" : "pointer",
+            }}
+          >
+            {exporting === "pdf" ? "Generating PDF…" : "Export PDF"}
+          </button>
 
           <div style={{ display: "flex", gap: 5 }}>
             {aeFTE > 0 && <Badge color={C.blue}>{aeFTE} AE</Badge>}
