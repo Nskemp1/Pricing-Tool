@@ -142,7 +142,7 @@ export default function PricingModel() {
   const [discountSDR, setDiscountSDR] = useState(0);
   const [discountISR, setDiscountISR] = useState(0);
   const [setupFee, setSetupFee] = useState(3000);
-  const [varPct, setVarPct] = useState(0.02);
+  const [varPct, setVarPct] = useState(0);
 
   // Program-based ROI inputs (new)
   const [programLengthMonths, setProgramLengthMonths] = useState(6);
