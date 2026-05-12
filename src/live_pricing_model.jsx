@@ -51,6 +51,64 @@ function Field({ label, value, onChange, prefix = "$", suffix = "", placeholder 
   );
 }
 
+const VERTICALS = [
+  "Cybersecurity",
+  "Data",
+  "AI",
+  "FinTech",
+  "Health Tech",
+  "Networking/Communication",
+  "Sales/Marketing/Customer Tech",
+  "Supply Chain/Logistics/Transportation Tech",
+  "HR Tech",
+  "Gov Tech",
+  "Education",
+  "Professional Services",
+  "Legal Tech",
+  "Real Estate Tech",
+];
+
+const COMPANY_SIZES = [
+  { value: "under-500k",   tier: "Startup",              range: "Under $500K" },
+  { value: "500k-1m",      tier: "Startup",              range: "$500K – $1M" },
+  { value: "1m-5m",        tier: "Startup",              range: "$1M – $5M" },
+  { value: "5m-10m",       tier: "Startup",              range: "$5M – $10M" },
+  { value: "10m-25m",      tier: "SMB",                  range: "$10M – $25M" },
+  { value: "25m-50m",      tier: "SMB",                  range: "$25M – $50M" },
+  { value: "50m-100m",     tier: "SMB",                  range: "$50M – $100M" },
+  { value: "100m-250m",    tier: "Mid-Market",           range: "$100M – $250M" },
+  { value: "250m-500m",    tier: "Mid-Market",           range: "$250M – $500M" },
+  { value: "500m-1b",      tier: "Mid-Market",           range: "$500M – $1B" },
+  { value: "1b-5b",        tier: "Enterprise/Strategic", range: "$1B – $5B" },
+  { value: "over-5b",      tier: "Enterprise/Strategic", range: "Over $5B" },
+];
+
+function Select({ label, value, onChange, options, placeholder = "— Select —" }) {
+  return (
+    <div style={{ marginBottom: 11 }}>
+      <label style={{ display: "block", fontFamily: "monospace", fontSize: 10, color: C.textLight, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</label>
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
+        style={{
+          width: "100%", boxSizing: "border-box",
+          background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5,
+          color: value ? C.text : C.textFaint,
+          fontFamily: "monospace", fontSize: 12,
+          padding: "5px 8px", outline: "none", cursor: "pointer",
+        }}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((opt) => {
+          const v = typeof opt === "string" ? opt : opt.value;
+          const l = typeof opt === "string" ? opt : opt.label;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </div>
+  );
+}
+
 function KPI({ label, value, sub, color = C.text, bg = C.bg, border = C.border }) {
   return (
     <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "11px 14px" }}>
@@ -159,6 +217,10 @@ export default function PricingModel() {
 
   const [tab, setTab] = useState("summary");
   const [role, setRole] = useState("sdr"); // sdr | isr | ae
+
+  // Calibrate to Client (UI only — ZoomInfo data wiring deferred)
+  const [vertical, setVertical] = useState(null);
+  const [companySize, setCompanySize] = useState(null);
 
   // PDF export
   const mainRef = useRef(null);
@@ -396,6 +458,35 @@ export default function PricingModel() {
         {/* —— SIDEBAR ———————————————————————————————————————————————————— */}
         <div style={S.sidebar}>
           <div style={{ fontSize: 10, fontFamily: "monospace", color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Configuration</div>
+
+          <Collapsible title="Calibrate to Client" accent={C.blue} defaultOpen={true}>
+            <Select
+              label="Vertical"
+              value={vertical}
+              onChange={setVertical}
+              options={VERTICALS}
+              placeholder="— Select vertical —"
+            />
+            <Select
+              label="Company Size"
+              value={companySize}
+              onChange={setCompanySize}
+              options={COMPANY_SIZES.map((c) => ({ value: c.value, label: `${c.tier} · ${c.range}` }))}
+              placeholder="— Select company size —"
+            />
+            <div style={{ marginBottom: 4 }}>
+              <label style={{ display: "block", fontFamily: "monospace", fontSize: 10, color: C.textLight, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>ICP — Top Titles</label>
+              <div style={{
+                background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 5,
+                padding: "10px 10px", fontFamily: "monospace", fontSize: 11,
+                color: C.textFaint, fontStyle: "italic", lineHeight: 1.4, minHeight: 44,
+              }}>
+                {vertical
+                  ? "Top titles for this vertical will populate here once the ZoomInfo dataset is connected."
+                  : "Select a vertical to populate ICP titles & seed projections from historic data."}
+              </div>
+            </div>
+          </Collapsible>
 
           {/* Role tab row */}
           <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
