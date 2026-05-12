@@ -1,5 +1,6 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { exportToPdf } from "./lib/exports";
+import { getCalibratedRamp, defaultRampForLength } from "./lib/calibration";
 
 const fmt = (n) => n == null || isNaN(n) || !isFinite(n) ? "—" : "$" + Math.round(n).toLocaleString("en-US");
 const fmtN = (n, dp = 1) => n == null || isNaN(n) ? "—" : Number(n).toFixed(dp);
@@ -218,9 +219,32 @@ export default function PricingModel() {
   const [tab, setTab] = useState("summary");
   const [role, setRole] = useState("sdr"); // sdr | isr | ae
 
-  // Calibrate to Client (UI only — ZoomInfo data wiring deferred)
+  // Calibrate to Client
   const [vertical, setVertical] = useState(null);
   const [companySize, setCompanySize] = useState(null);
+
+  // Holds the pre-calibration ramp so we can restore it when the rep clears
+  // the Vertical dropdown.
+  const rampSnapshotRef = useRef(null);
+  // Look up tier from the companySize value (state stores the size value).
+  const selectedTier = companySize
+    ? COMPANY_SIZES.find((c) => c.value === companySize)?.tier
+    : null;
+  useEffect(() => {
+    if (!vertical) {
+      if (rampSnapshotRef.current) {
+        setRamp(rampSnapshotRef.current);
+        rampSnapshotRef.current = null;
+      }
+      return;
+    }
+    if (rampSnapshotRef.current === null) {
+      rampSnapshotRef.current = ramp;
+    }
+    const calibrated = getCalibratedRamp(vertical, selectedTier, programLengthMonths);
+    setRamp(calibrated ?? defaultRampForLength(programLengthMonths));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vertical, selectedTier, programLengthMonths]);
 
   // PDF export
   const mainRef = useRef(null);
