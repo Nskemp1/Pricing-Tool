@@ -69,20 +69,7 @@ const VERTICALS = [
   "Real Estate Tech",
 ];
 
-const COMPANY_SIZES = [
-  { value: "under-500k",   tier: "Startup",              range: "Under $500K" },
-  { value: "500k-1m",      tier: "Startup",              range: "$500K – $1M" },
-  { value: "1m-5m",        tier: "Startup",              range: "$1M – $5M" },
-  { value: "5m-10m",       tier: "Startup",              range: "$5M – $10M" },
-  { value: "10m-25m",      tier: "SMB",                  range: "$10M – $25M" },
-  { value: "25m-50m",      tier: "SMB",                  range: "$25M – $50M" },
-  { value: "50m-100m",     tier: "SMB",                  range: "$50M – $100M" },
-  { value: "100m-250m",    tier: "Mid-Market",           range: "$100M – $250M" },
-  { value: "250m-500m",    tier: "Mid-Market",           range: "$250M – $500M" },
-  { value: "500m-1b",      tier: "Mid-Market",           range: "$500M – $1B" },
-  { value: "1b-5b",        tier: "Enterprise/Strategic", range: "$1B – $5B" },
-  { value: "over-5b",      tier: "Enterprise/Strategic", range: "Over $5B" },
-];
+const COMPANY_SIZES = ["Startup", "SMB", "Mid-Market", "Enterprise"];
 
 function Select({ label, value, onChange, options, placeholder = "— Select —" }) {
   return (
@@ -226,10 +213,8 @@ export default function PricingModel() {
   // Holds the pre-calibration ramp so we can restore it when the rep clears
   // the Vertical dropdown.
   const rampSnapshotRef = useRef(null);
-  // Look up tier from the companySize value (state stores the size value).
-  const selectedTier = companySize
-    ? COMPANY_SIZES.find((c) => c.value === companySize)?.tier
-    : null;
+  // companySize state IS the tier name (Startup / SMB / Mid-Market / Enterprise).
+  const selectedTier = companySize;
   useEffect(() => {
     if (!vertical) {
       if (rampSnapshotRef.current) {
@@ -495,21 +480,9 @@ export default function PricingModel() {
               label="Company Size"
               value={companySize}
               onChange={setCompanySize}
-              options={COMPANY_SIZES.map((c) => ({ value: c.value, label: `${c.tier} · ${c.range}` }))}
+              options={COMPANY_SIZES}
               placeholder="— Select company size —"
             />
-            <div style={{ marginBottom: 4 }}>
-              <label style={{ display: "block", fontFamily: "monospace", fontSize: 10, color: C.textLight, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>ICP — Top Titles</label>
-              <div style={{
-                background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 5,
-                padding: "10px 10px", fontFamily: "monospace", fontSize: 11,
-                color: C.textFaint, fontStyle: "italic", lineHeight: 1.4, minHeight: 44,
-              }}>
-                {vertical
-                  ? "Top titles for this vertical will populate here once the ZoomInfo dataset is connected."
-                  : "Select a vertical to populate ICP titles & seed projections from historic data."}
-              </div>
-            </div>
           </Collapsible>
 
           {/* Role tab row */}
