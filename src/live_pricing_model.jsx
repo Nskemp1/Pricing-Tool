@@ -107,20 +107,27 @@ function KPI({ label, value, sub, color = C.text, bg = C.bg, border = C.border }
   );
 }
 
+const PROJECTION_MILESTONES = [3, 6, 12, 24];
+const PROJECTION_LABELS = ["M3", "M6", "Year 1", "Year 2"];
+
+// Cumulative-through-milestone with steady-state extrapolation past program end.
+function cumulativeAt(monthlyArr, getter, programLength, steadyPerMonth) {
+  return PROJECTION_MILESTONES.map((m) => {
+    const inSlice = monthlyArr.slice(0, Math.min(m, programLength));
+    const sumIn = inSlice.reduce((a, x) => a + (getter(x) ?? 0), 0);
+    const extension = m > programLength ? (m - programLength) * steadyPerMonth : 0;
+    return sumIn + extension;
+  });
+}
+
 function ProjectionTable({ rows, S }) {
-  const milestones = [
-    { label: "M3", n: 3 },
-    { label: "M6", n: 6 },
-    { label: "Year 1", n: 12 },
-    { label: "Year 2", n: 24 },
-  ];
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4 }}>
       <thead>
         <tr>
           <th style={{ ...S.thl, padding: "6px 8px" }}>Metric</th>
-          {milestones.map((m) => (
-            <th key={m.label} style={{ ...S.th, padding: "6px 8px" }}>{m.label}</th>
+          {PROJECTION_LABELS.map((label) => (
+            <th key={label} style={{ ...S.th, padding: "6px 8px" }}>{label}</th>
           ))}
         </tr>
       </thead>
@@ -131,9 +138,9 @@ function ProjectionTable({ rows, S }) {
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, flexShrink: 0 }} />
               <span style={{ fontWeight: 600, color: C.textMid }}>{row.label}</span>
             </td>
-            {milestones.map((m) => (
-              <td key={m.label} style={{ ...S.td, padding: "7px 8px", fontWeight: 700, color: row.enabled ? row.color : C.textFaint }}>
-                {row.enabled ? row.format(row.per * m.n) : "—"}
+            {row.values.map((v, i) => (
+              <td key={i} style={{ ...S.td, padding: "7px 8px", fontWeight: 700, color: row.enabled ? row.color : C.textFaint }}>
+                {row.enabled ? row.format(v) : "—"}
               </td>
             ))}
           </tr>
@@ -651,11 +658,11 @@ export default function PricingModel() {
               </div>
               <ProjectionTable
                 rows={[
-                  { label: "Total SALs", per: calc.steadySdrAvgSals, color: C.teal, format: (v) => fmtN(v, 0), enabled: true },
-                  { label: "Total SQLs", per: calc.steadySdrAvgSqls, color: "#0d9488", format: (v) => fmtN(v, 0), enabled: true },
-                  { label: "Pipeline $", per: calc.steadySdrAvgPipeline, color: C.amber, format: (v) => fmt(v), enabled: calc.hasACV },
-                  { label: "Deals Won", per: calc.steadySdrAvgWon, color: C.blue, format: (v) => fmtN(v, 1), enabled: calc.hasClose },
-                  { label: "Total Won ICV", per: calc.steadySdrAvgWon * (avgContractValue ?? 0), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
+                  { label: "Total SALs",    values: cumulativeAt(calc.monthly, (x) => x.sdrTotalSals,                            programLengthMonths, calc.steadySdrAvgSals),                                  color: C.teal,    format: (v) => fmtN(v, 0), enabled: true },
+                  { label: "Total SQLs",    values: cumulativeAt(calc.monthly, (x) => x.sdrTotalSqls,                            programLengthMonths, calc.steadySdrAvgSqls),                                  color: "#0d9488", format: (v) => fmtN(v, 0), enabled: true },
+                  { label: "Pipeline $",    values: cumulativeAt(calc.monthly, (x) => x.sdrPipeline,                             programLengthMonths, calc.steadySdrAvgPipeline),                              color: C.amber,   format: (v) => fmt(v),     enabled: calc.hasACV },
+                  { label: "Deals Won",     values: cumulativeAt(calc.monthly, (x) => x.sdrDealsWon,                             programLengthMonths, calc.steadySdrAvgWon),                                   color: C.blue,    format: (v) => fmtN(v, 1), enabled: calc.hasClose },
+                  { label: "Total Won ICV", values: cumulativeAt(calc.monthly, (x) => (x.sdrDealsWon ?? 0) * (avgContractValue ?? 0), programLengthMonths, calc.steadySdrAvgWon * (avgContractValue ?? 0)), color: C.green,   format: (v) => fmt(v),     enabled: calc.hasACV && calc.hasClose },
                 ]}
                 S={S}
               />
@@ -675,11 +682,11 @@ export default function PricingModel() {
                 </div>
                 <ProjectionTable
                   rows={[
-                    { label: "Total SALs", per: calc.steadyIsrAvgSals, color: C.purple, format: (v) => fmtN(v, 0), enabled: true },
-                    { label: "Total SQLs", per: calc.steadyIsrAvgSqls, color: "#7c3aed", format: (v) => fmtN(v, 0), enabled: true },
-                    { label: "Pipeline $", per: calc.steadyIsrAvgPipeline, color: C.amber, format: (v) => fmt(v), enabled: calc.hasACV },
-                    { label: "Deals Won", per: calc.steadyIsrAvgWon, color: C.purple, format: (v) => fmtN(v, 1), enabled: calc.hasClose },
-                    { label: "Total Won ICV", per: calc.steadyIsrAvgWon * (avgContractValue ?? 0), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
+                    { label: "Total SALs",    values: cumulativeAt(calc.monthly, (x) => x.isrTotalSals,                            programLengthMonths, calc.steadyIsrAvgSals),                                  color: C.purple,  format: (v) => fmtN(v, 0), enabled: true },
+                    { label: "Total SQLs",    values: cumulativeAt(calc.monthly, (x) => x.isrTotalSqls,                            programLengthMonths, calc.steadyIsrAvgSqls),                                  color: "#7c3aed", format: (v) => fmtN(v, 0), enabled: true },
+                    { label: "Pipeline $",    values: cumulativeAt(calc.monthly, (x) => x.isrPipeline,                             programLengthMonths, calc.steadyIsrAvgPipeline),                              color: C.amber,   format: (v) => fmt(v),     enabled: calc.hasACV },
+                    { label: "Deals Won",     values: cumulativeAt(calc.monthly, (x) => x.isrDealsWon,                             programLengthMonths, calc.steadyIsrAvgWon),                                   color: C.purple,  format: (v) => fmtN(v, 1), enabled: calc.hasClose },
+                    { label: "Total Won ICV", values: cumulativeAt(calc.monthly, (x) => (x.isrDealsWon ?? 0) * (avgContractValue ?? 0), programLengthMonths, calc.steadyIsrAvgWon * (avgContractValue ?? 0)), color: C.green,   format: (v) => fmt(v),     enabled: calc.hasACV && calc.hasClose },
                   ]}
                   S={S}
                 />
