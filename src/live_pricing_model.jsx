@@ -216,6 +216,9 @@ export default function PricingModel() {
   // Calibrate to Client
   const [vertical, setVertical] = useState(null);
   const [companySize, setCompanySize] = useState(null);
+  const [yr1Renewal, setYr1Renewal] = useState(0.80);
+  const [yr2Renewal, setYr2Renewal] = useState(0.70);
+  const [yr3Renewal, setYr3Renewal] = useState(0.60);
 
   // Holds the pre-calibration ramp so we can restore it when the rep clears
   // the Vertical dropdown.
@@ -344,6 +347,15 @@ export default function PricingModel() {
     };
     const totalWonDealValue = totals.wonRev;
 
+    // Lifetime revenue projection (renewal rates applied independently to base ICV)
+    const y1RenewalRev = totalWonDealValue * (yr1Renewal ?? 0);
+    const y2RenewalRev = totalWonDealValue * (yr2Renewal ?? 0);
+    const y3RenewalRev = totalWonDealValue * (yr3Renewal ?? 0);
+    const lifetimeY1 = totalWonDealValue + y1RenewalRev;
+    const lifetimeY2 = lifetimeY1 + y2RenewalRev;
+    const lifetimeY3 = lifetimeY2 + y3RenewalRev;
+    const hasRenewals = yr1Renewal != null || yr2Renewal != null || yr3Renewal != null;
+
     // Steady-state (in-program) averages for the overview pipeline cards
     const inProgramMonthly = monthly.filter((x) => x.inProgram);
     const N = inProgramMonthly.length;
@@ -367,6 +379,8 @@ export default function PricingModel() {
       monthlyBill: monthlyBilling, monthlyClientBill: monthlyClientBilling,
       endAE, endSDR, endISR,
       totalWonDealValue,
+      y1RenewalRev, y2RenewalRev, y3RenewalRev,
+      lifetimeY1, lifetimeY2, lifetimeY3, hasRenewals,
       totalPipelineCreated: totals.pipeline,
       totalDealsWon: totals.deals,
       totalSalsSum: totals.sals,
@@ -378,7 +392,8 @@ export default function PricingModel() {
     };
   }, [aeFTE, sdrFTE, isrFTE, priceAE, priceSDR, priceISR, discountAE, discountSDR, discountISR,
     setupFee, varPct, monthlyManagement, monthlyData,
-    salToSqlRate, closeRate, avgContractValue, avgSalesCycleMonths, ramp, isrRamp, programLengthMonths]);
+    salToSqlRate, closeRate, avgContractValue, avgSalesCycleMonths, ramp, isrRamp, programLengthMonths,
+    yr1Renewal, yr2Renewal, yr3Renewal]);
 
   // —— STYLES ————————————————————————————————————————————————————————————————
   const S = {
@@ -527,6 +542,9 @@ export default function PricingModel() {
               <Field label="Close Rate" value={closeRate == null ? null : closeRate * 100} onChange={(v) => setCloseRate(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="From client convo" />
               <Field label="Avg Contract Value" value={avgContractValue} onChange={setAvgContractValue} placeholder="From client convo" />
               <Field label="Avg Sales Cycle (Months)" value={avgSalesCycleMonths} onChange={setAvgSalesCycleMonths} prefix="" placeholder="From client convo" />
+              <Field label="Yr 1 Renewal Rate" value={yr1Renewal == null ? null : yr1Renewal * 100} onChange={(v) => setYr1Renewal(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="% of deals renewing at Y1" />
+              <Field label="Yr 2 Renewal Rate" value={yr2Renewal == null ? null : yr2Renewal * 100} onChange={(v) => setYr2Renewal(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="% of deals still active at Y2" />
+              <Field label="Yr 3 Renewal Rate" value={yr3Renewal == null ? null : yr3Renewal * 100} onChange={(v) => setYr3Renewal(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="% of deals still active at Y3" />
             </Collapsible>
           </>}
 
@@ -560,6 +578,9 @@ export default function PricingModel() {
                 <Field label="Close Rate" value={closeRate == null ? null : closeRate * 100} onChange={(v) => setCloseRate(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="From client convo" />
                 <Field label="Avg Contract Value" value={avgContractValue} onChange={setAvgContractValue} placeholder="From client convo" />
                 <Field label="Avg Sales Cycle (Months)" value={avgSalesCycleMonths} onChange={setAvgSalesCycleMonths} prefix="" placeholder="From client convo" />
+                <Field label="Yr 1 Renewal Rate" value={yr1Renewal == null ? null : yr1Renewal * 100} onChange={(v) => setYr1Renewal(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="% of deals renewing at Y1" />
+                <Field label="Yr 2 Renewal Rate" value={yr2Renewal == null ? null : yr2Renewal * 100} onChange={(v) => setYr2Renewal(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="% of deals still active at Y2" />
+                <Field label="Yr 3 Renewal Rate" value={yr3Renewal == null ? null : yr3Renewal * 100} onChange={(v) => setYr3Renewal(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="% of deals still active at Y3" />
               </Collapsible>
 
               <button
@@ -601,6 +622,9 @@ export default function PricingModel() {
                 <Field label="Close Rate" value={closeRate == null ? null : closeRate * 100} onChange={(v) => setCloseRate(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="From client convo" />
                 <Field label="Avg Contract Value" value={avgContractValue} onChange={setAvgContractValue} placeholder="From client convo" />
                 <Field label="Avg Sales Cycle (Months)" value={avgSalesCycleMonths} onChange={setAvgSalesCycleMonths} prefix="" placeholder="From client convo" />
+                <Field label="Yr 1 Renewal Rate" value={yr1Renewal == null ? null : yr1Renewal * 100} onChange={(v) => setYr1Renewal(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="% of deals renewing at Y1" />
+                <Field label="Yr 2 Renewal Rate" value={yr2Renewal == null ? null : yr2Renewal * 100} onChange={(v) => setYr2Renewal(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="% of deals still active at Y2" />
+                <Field label="Yr 3 Renewal Rate" value={yr3Renewal == null ? null : yr3Renewal * 100} onChange={(v) => setYr3Renewal(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="% of deals still active at Y3" />
               </Collapsible>
 
               <button
@@ -612,9 +636,9 @@ export default function PricingModel() {
             </>
           ))}
 
-          {/* Monthly billing summary (always visible) */}
+          {/* Monthly investment summary (always visible) */}
           <div style={{ ...card(C.blueLight, C.blueBorder), fontSize: 11, fontFamily: "monospace", color: C.blue, marginTop: 10 }}>
-            Monthly billing: {fmt(calc.monthlyClientBill)}
+            Monthly investment: {fmt(calc.monthlyClientBill)}
           </div>
 
           {/* ——— ADVANCED: always available, collapsed by default ———————— */}
@@ -637,7 +661,7 @@ export default function PricingModel() {
             const roiDisplay = roiNum == null ? "—" : (Math.round(roiNum * 10) / 10) + "x";
             return (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 16 }}>
-                <KPI label="Monthly Billing" value={fmt(calc.monthlyClientBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR + mgmt + data`} color={C.blue} bg={C.blueLight} border={C.blueBorder} />
+                <KPI label="Monthly Investment" value={fmt(calc.monthlyClientBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR + mgmt + data`} color={C.blue} bg={C.blueLight} border={C.blueBorder} />
                 <KPI label="Total Client Investment" value={fmt(calc.totalClientSpend)} sub="Program total (billing + fees + setup)" />
                 <KPI label="Total Won Revenue" value={calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"} sub="ICV closed from program pipeline" color={C.green} />
                 <KPI label="ROI" value={roiDisplay} sub="Won revenue ÷ client investment" color={C.purple} bg={C.purpleLight} border={C.purpleBorder} />
@@ -645,6 +669,34 @@ export default function PricingModel() {
               </div>
             );
           })()}
+
+          {/* Lifetime Revenue KPI row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 16 }}>
+            <KPI
+              label="Lifetime Revenue — Y1"
+              value={calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.lifetimeY1) : "—"}
+              sub={`Won + Y1 renewals (${yr1Renewal == null ? "—" : Math.round(yr1Renewal * 100) + "%"})`}
+              color={C.green}
+              bg={C.blueLight}
+              border={C.blueBorder}
+            />
+            <KPI
+              label="Lifetime Revenue — Y2"
+              value={calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.lifetimeY2) : "—"}
+              sub={`Cumulative through Y2 (${yr2Renewal == null ? "—" : Math.round(yr2Renewal * 100) + "%"})`}
+              color={C.green}
+              bg={C.blueLight}
+              border={C.blueBorder}
+            />
+            <KPI
+              label="Lifetime Revenue — Y3"
+              value={calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.lifetimeY3) : "—"}
+              sub={`Cumulative through Y3 (${yr3Renewal == null ? "—" : Math.round(yr3Renewal * 100) + "%"})`}
+              color={C.green}
+              bg={C.blueLight}
+              border={C.blueBorder}
+            />
+          </div>
 
           {/* FUNNEL OVERVIEW CARDS */}
           <div style={{ display: "grid", gridTemplateColumns: isrFTE > 0 ? "1fr 1fr" : "1fr", gap: 12, marginBottom: 16 }}>
@@ -888,6 +940,9 @@ export default function PricingModel() {
                   {[
                     ["Client Investment", fmt(calc.totalClientSpend)],
                     ["Won Revenue (ICV)", calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totals.wonRev) : "—"],
+                    ["Lifetime Revenue — Y1", calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.lifetimeY1) : "—"],
+                    ["Lifetime Revenue — Y2", calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.lifetimeY2) : "—"],
+                    ["Lifetime Revenue — Y3", calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.lifetimeY3) : "—"],
                     ["Pipeline Created", calc.hasACV ? fmt(calc.totals.pipeline) : "—"],
                     ["Total Deals Won", calc.hasClose ? fmtN(calc.totals.deals, 1) : "—"],
                     ["Total SALs", fmtN(calc.totals.sals, 0)],
