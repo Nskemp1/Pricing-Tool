@@ -265,40 +265,16 @@ function drawSectionBar(pdf, label, accent, x, y) {
 }
 
 function placeCanvas(pdf, canvas, startY, pageW, pageH) {
+  // Fit the entire captured canvas on a single page. Scale by the smaller of
+  // the width or height ratio so neither dimension overflows. Center horizontally
+  // if the resulting image is narrower than the usable width.
   const usableW = pageW - PAGE_MARGIN * 2;
-  const ratio = usableW / canvas.width;
-  const scaledFullH = canvas.height * ratio;
   const usableH = pageH - PAGE_MARGIN - startY;
-
-  if (scaledFullH <= usableH) {
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", PAGE_MARGIN, startY, usableW, scaledFullH);
-    return;
-  }
-
-  // Paginate. First slice fits in (pageH - startY - margin); subsequent slices use full usable height.
-  const sliceCanvas = document.createElement("canvas");
-  sliceCanvas.width = canvas.width;
-  const ctx = sliceCanvas.getContext("2d");
-
-  let y = 0;
-  let isFirst = true;
-  while (y < canvas.height) {
-    const availPdfH = isFirst ? usableH : (pageH - PAGE_MARGIN * 2);
-    const sliceCanvasH = Math.floor(availPdfH / ratio);
-    const remaining = canvas.height - y;
-    const thisH = Math.min(sliceCanvasH, remaining);
-    sliceCanvas.height = thisH;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, sliceCanvas.width, thisH);
-    ctx.drawImage(canvas, 0, y, canvas.width, thisH, 0, 0, canvas.width, thisH);
-
-    if (!isFirst) pdf.addPage();
-    const drawY = isFirst ? startY : PAGE_MARGIN;
-    pdf.addImage(sliceCanvas.toDataURL("image/png"), "PNG", PAGE_MARGIN, drawY, usableW, thisH * ratio);
-
-    y += thisH;
-    isFirst = false;
-  }
+  const ratio = Math.min(usableW / canvas.width, usableH / canvas.height);
+  const drawW = canvas.width * ratio;
+  const drawH = canvas.height * ratio;
+  const drawX = PAGE_MARGIN + (usableW - drawW) / 2;
+  pdf.addImage(canvas.toDataURL("image/png"), "PNG", drawX, startY, drawW, drawH);
 }
 
 export async function exportToPdf(element, inputs, opts = {}) {
