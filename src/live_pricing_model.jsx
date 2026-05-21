@@ -427,19 +427,18 @@ export default function PricingModel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vertical, selectedTier, programLengthMonths]);
 
-  // When no Vertical is selected, extending or shrinking Program Length should still
-  // keep the ramp array in sync. Pad new months with the steady-state value (last
-  // value of the current ramp — defaults to 10 from DEFAULT_RAMP). Truncate when
-  // the program is shortened.
+  // When no Vertical is selected, extending Program Length should pad the ramp
+  // with the steady-state value (last value of current ramp — defaults to 10 from
+  // DEFAULT_RAMP). Never truncate: shrinking Program Length leaves trailing
+  // entries in place. The calc only reads ramp[0..programLengthMonths-1], so
+  // unused entries are harmless but preserve original values if the user later
+  // expands the program back out.
   useEffect(() => {
     if (vertical) return; // calibration effect handles the with-vertical case
     setRamp((prev) => {
-      if (prev.length === programLengthMonths) return prev;
-      if (prev.length < programLengthMonths) {
-        const steady = prev.length > 0 ? prev[prev.length - 1] : 10;
-        return [...prev, ...Array(programLengthMonths - prev.length).fill(steady)];
-      }
-      return prev.slice(0, programLengthMonths);
+      if (prev.length >= programLengthMonths) return prev;
+      const steady = prev.length > 0 ? prev[prev.length - 1] : 10;
+      return [...prev, ...Array(programLengthMonths - prev.length).fill(steady)];
     });
   }, [programLengthMonths, vertical]);
 
@@ -1001,7 +1000,8 @@ export default function PricingModel() {
                           onChange={(e) => {
                             const nv = e.target.value === "" ? 0 : Number(e.target.value);
                             setRamp((prev) => {
-                              const next = Array.from({ length: programLengthMonths }, (_, j) => prev[j] ?? 0);
+                              const len = Math.max(prev.length, i + 1);
+                              const next = Array.from({ length: len }, (_, j) => prev[j] ?? 0);
                               next[i] = nv;
                               return next;
                             });
