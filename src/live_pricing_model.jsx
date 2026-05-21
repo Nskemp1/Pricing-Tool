@@ -427,6 +427,22 @@ export default function PricingModel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vertical, selectedTier, programLengthMonths]);
 
+  // When no Vertical is selected, extending or shrinking Program Length should still
+  // keep the ramp array in sync. Pad new months with the steady-state value (last
+  // value of the current ramp — defaults to 10 from DEFAULT_RAMP). Truncate when
+  // the program is shortened.
+  useEffect(() => {
+    if (vertical) return; // calibration effect handles the with-vertical case
+    setRamp((prev) => {
+      if (prev.length === programLengthMonths) return prev;
+      if (prev.length < programLengthMonths) {
+        const steady = prev.length > 0 ? prev[prev.length - 1] : 10;
+        return [...prev, ...Array(programLengthMonths - prev.length).fill(steady)];
+      }
+      return prev.slice(0, programLengthMonths);
+    });
+  }, [programLengthMonths, vertical]);
+
   // PDF export
   const mainRef = useRef(null);
   const pdfRef = useRef(null);
