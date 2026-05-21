@@ -209,11 +209,13 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, term }) {
           <span style={{ fontSize: 10, color: C.textLight, fontWeight: 600, textAlign: "right", lineHeight: 1.2 }}>{label}</span>
         </div>
         {/* Middle: trapezoid (SVG polygon) + centered value overlay */}
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", height: BAND_HEIGHT }}>
           <svg
+            width="100%"
+            height={BAND_HEIGHT}
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }}
+            style={{ display: "block" }}
           >
             <polygon points={points} fill={color} />
           </svg>
