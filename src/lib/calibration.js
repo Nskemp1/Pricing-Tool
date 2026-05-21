@@ -73,7 +73,7 @@ export const VERTICAL_TIER_RAMP = {
   "Supply Chain/Logistics/Transportation Tech|Enterprise": [9, 30, 14, 9, 10, 7],
 };
 
-export const DEFAULT_RAMP = [3, 6, 8, 12, 12, 12];
+export const DEFAULT_RAMP = [3, 5, 6, 10, 10, 10];
 
 // Returns a length-`programLengthMonths` ramp array, or null when there is
 // no calibration data at all for the chosen vertical (caller decides what
