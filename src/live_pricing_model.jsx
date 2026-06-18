@@ -372,6 +372,10 @@ export default function PricingModel() {
   const [closeRate, setCloseRate] = useState(0.15);
   const [avgContractValue, setAvgContractValue] = useState(50000);
   const [avgSalesCycleMonths, setAvgSalesCycleMonths] = useState(6);
+  // Goal-seek / program builder (planning inputs — do not feed the forward calc directly)
+  const [pipelineTarget, setPipelineTarget] = useState(null);   // $ — XOR with revenueTarget
+  const [revenueTarget, setRevenueTarget] = useState(null);     // $ — XOR with pipelineTarget
+  const [targetProgramLength, setTargetProgramLength] = useState(8); // months, planning only
   const [ramp, setRamp] = useState([3, 5, 6, 10, 10, 10]);
   // ISR sequential funnel rates (used when isrFTE > 0): SDR SQLs → Q-Opps → SAOs → Deals
   const [sqlToQOppRate, setSqlToQOppRate] = useState(0.60);
@@ -589,6 +593,55 @@ export default function PricingModel() {
     salToSqlRate, sqlToQOppRate, qOppToSaoRate, saoWinRate, closeRate, avgContractValue, avgSalesCycleMonths, ramp, programLengthMonths,
     yr1Renewal, yr2Renewal, yr3Renewal]);
 
+  // —— GOAL-SEEK / PROGRAM BUILDER ———————————————————————————————————————————
+  // Inverts the (linear-in-SDR) forward funnel: given a Pipeline OR Revenue target plus a target
+  // program length, compute how many SDRs are required. Planning-only — never mutates the model
+  // until the rep clicks "Build This Program".
+  const goalSeek = useMemo(() => {
+    const L = Math.max(1, Math.round(targetProgramLength || 0));
+    // Build the ramp for the TARGET length, mirroring the live ramp effects so the preview matches
+    // exactly what Build will produce.
+    const targetRamp = vertical
+      ? (getCalibratedRamp(vertical, selectedTier, L) ?? defaultRampForLength(L))
+      : (() => {
+          const steady = ramp.length ? ramp[ramp.length - 1] : 10;
+          return Array.from({ length: L }, (_, i) => ramp[i] ?? steady);
+        })();
+    const rampSum = targetRamp.reduce((a, x) => a + x, 0);
+
+    const isrInProgram = isrFTE > 0;
+    const isrMult = isrInProgram ? (sqlToQOppRate ?? 0) * (qOppToSaoRate ?? 0) : 1;
+    const effClose = isrInProgram ? saoWinRate : closeRate;
+
+    const pipelinePerSdr = rampSum * (salToSqlRate ?? 0) * isrMult * (avgContractValue ?? 0);
+    const revenuePerSdr = pipelinePerSdr * (effClose ?? 0);
+
+    const mode = pipelineTarget != null ? "pipeline" : revenueTarget != null ? "revenue" : null;
+    const target = mode === "pipeline" ? pipelineTarget : revenueTarget;
+    const perSdr = mode === "pipeline" ? pipelinePerSdr : revenuePerSdr;
+
+    // Figure out which client inputs are still missing for the chosen mode.
+    const missing = [];
+    if (!(avgContractValue > 0)) missing.push("Avg Contract Value");
+    if (!(salToSqlRate > 0)) missing.push(`${term("sal", "singular")} to ${term("sql", "singular")} Rate`);
+    if (mode === "revenue" && !(effClose > 0)) missing.push(isrInProgram ? `${term("sao", "singular")} Win Rate` : "Close Rate");
+
+    const solvable = mode != null && perSdr > 0 && (target ?? 0) > 0;
+    const sdrsNeeded = solvable ? Math.max(1, Math.ceil(target / perSdr)) : null;
+    const projPipeline = sdrsNeeded != null ? sdrsNeeded * pipelinePerSdr : null;
+    const projRevenue = sdrsNeeded != null ? sdrsNeeded * revenuePerSdr : null;
+
+    return { mode, length: L, sdrsNeeded, projPipeline, projRevenue, solvable, missing };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineTarget, revenueTarget, targetProgramLength, vertical, selectedTier, ramp,
+    isrFTE, sqlToQOppRate, qOppToSaoRate, saoWinRate, closeRate, salToSqlRate, avgContractValue, terms]);
+
+  const buildProgram = () => {
+    if (!goalSeek.solvable) return;
+    setProgramLengthMonths(goalSeek.length); // existing ramp effects recalibrate `ramp` to this length
+    setSdrFTE(goalSeek.sdrsNeeded);
+  };
+
   // —— STYLES ————————————————————————————————————————————————————————————————
   const S = {
     root: { background: "#f1f5f9", minHeight: "100vh", color: C.text, fontFamily: "'Segoe UI', system-ui, sans-serif", display: "flex", flexDirection: "column" },
@@ -724,6 +777,34 @@ export default function PricingModel() {
             </Collapsible>
 
             <Collapsible title="Client Inputs" accent={C.teal} defaultOpen={true}>
+              {/* ——— Program builder (goal-seek): size the program from a target ——— */}
+              <Field label="Pipeline Target" value={pipelineTarget}
+                onChange={(v) => { setPipelineTarget(v); if (v != null) setRevenueTarget(null); }}
+                placeholder="e.g. 1,000,000" />
+              <Field label="Revenue Target" value={revenueTarget}
+                onChange={(v) => { setRevenueTarget(v); if (v != null) setPipelineTarget(null); }}
+                placeholder="or set a revenue goal instead" />
+              <Field label="Target Program Length (Months)" value={targetProgramLength}
+                onChange={setTargetProgramLength} prefix="" />
+              {goalSeek.mode == null ? (
+                <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, marginTop: -4, marginBottom: 12, lineHeight: 1.5 }}>
+                  Enter a Pipeline or Revenue target to size the program.
+                </div>
+              ) : !goalSeek.solvable ? (
+                <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, marginTop: -4, marginBottom: 12, lineHeight: 1.5 }}>
+                  {goalSeek.missing.length ? `Add ${goalSeek.missing.join(", ")} to size the program.` : "Enter a target above $0 to size the program."}
+                </div>
+              ) : (
+                <div style={{ marginTop: -2, marginBottom: 12 }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 11, color: C.teal, background: C.tealLight, borderRadius: 5, padding: "6px 8px", marginBottom: 6, lineHeight: 1.5 }}>
+                    ~{goalSeek.sdrsNeeded} SDR{goalSeek.sdrsNeeded === 1 ? "" : "s"} → {fmt(goalSeek.projPipeline)} pipeline / {fmt(goalSeek.projRevenue)} revenue over {goalSeek.length} mo
+                  </div>
+                  <button onClick={buildProgram}
+                    style={{ width: "100%", padding: "7px 12px", border: "none", borderRadius: 6, background: C.teal, color: C.white, fontFamily: "monospace", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", cursor: "pointer" }}>
+                    Build This Program
+                  </button>
+                </div>
+              )}
               <Field label="Close Rate" value={closeRate == null ? null : closeRate * 100} onChange={(v) => setCloseRate(v == null ? null : v / 100)} prefix="" suffix="%" placeholder="From client convo" />
               <Field label="Avg Contract Value" value={avgContractValue} onChange={setAvgContractValue} placeholder="From client convo" />
               <Field label="Avg Sales Cycle (Months)" value={avgSalesCycleMonths} onChange={setAvgSalesCycleMonths} prefix="" placeholder="From client convo" />
@@ -854,7 +935,7 @@ export default function PricingModel() {
         {/* —— MAIN CONTENT ————————————————————————————————————————————————— */}
         <div ref={mainRef} style={S.main}>
 
-          <div ref={pdfRef}>
+          <div ref={pdfRef} data-pdf-root="true">
 
           {/* KPI row */}
           {(() => {
@@ -916,7 +997,7 @@ export default function PricingModel() {
           })()}
 
           {/* FUNNEL OVERVIEW — visualization on the left, table card on the right */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+          <div data-pdf-funnel-grid="true" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
             <FunnelViz
               counts={{
                 sals:  calc.totals.sals,
