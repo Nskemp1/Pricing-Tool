@@ -10,6 +10,11 @@ function todayStamp() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Long-form date for the proposal header, e.g. "June 18, 2026".
+function longDate() {
+  return new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
 export function buildFilename(inputs, ext) {
   const team = [
     inputs.aeFTE > 0 && `${inputs.aeFTE}AE`,
@@ -204,31 +209,87 @@ async function captureCanvas(element, html2canvas) {
   element.style.overflow = "visible";
   element.style.height = "auto";
   element.style.maxHeight = "none";
+
+  // Walk descendants and unclip any overflow:auto/hidden/scroll containers so
+  // html2canvas sees the natural full-width content. The Expected Outcomes
+  // card uses overflow:auto, which would otherwise clip the rightmost month
+  // columns in the captured canvas.
+  const overflowRestores = [];
+  element.querySelectorAll("*").forEach((el) => {
+    const cs = getComputedStyle(el);
+    if (cs.overflow !== "visible" || cs.overflowX !== "visible" || cs.overflowY !== "visible") {
+      overflowRestores.push({
+        el,
+        overflow: el.style.overflow,
+        overflowX: el.style.overflowX,
+        overflowY: el.style.overflowY,
+      });
+      el.style.overflow = "visible";
+      el.style.overflowX = "visible";
+      el.style.overflowY = "visible";
+    }
+  });
+
   const restoreInputs = freezeInputs(element);
   try {
     return await html2canvas(element, {
       scale: PDF_SCALE,
       backgroundColor: "#ffffff",
       logging: false,
-      windowWidth: element.scrollWidth,
+      // Force a consistent wide capture window so the Expected Outcomes table
+      // (with up to ~18 monthly columns for 9mo+9mo cycle configs) has room
+      // to render at natural width regardless of the user's browser viewport.
+      windowWidth: 1500,
       windowHeight: element.scrollHeight,
+      onclone: (clonedDoc) => {
+        // Pin the captured root to a consistent wide pixel width so layout
+        // reflows consistently in the clone (no dependency on the user's
+        // browser viewport). 1500px gives Expected Outcomes' month columns
+        // enough room to render at natural width, and lets the Funnel grid
+        // span the same full width as the rest of the captured content.
+        const root = clonedDoc.querySelector("[data-pdf-root]");
+        if (root) {
+          root.style.width = "1500px";
+          root.style.maxWidth = "1500px";
+        }
+        // For the export, stack the Funnel visualization above the Funnel table
+        // (single column) instead of the on-screen side-by-side layout. Side by
+        // side, the table's wide dollar columns overflow the capture width and
+        // get clipped; stacked, each gets the full width. Result: three stacked
+        // rows under the KPIs — viz, table, then Expected Outcomes.
+        const funnelGrid = clonedDoc.querySelector("[data-pdf-funnel-grid]");
+        if (funnelGrid) {
+          funnelGrid.style.gridTemplateColumns = "1fr";
+        }
+      },
     });
   } finally {
     restoreInputs();
+    overflowRestores.forEach(({ el, overflow, overflowX, overflowY }) => {
+      el.style.overflow = overflow;
+      el.style.overflowX = overflowX;
+      el.style.overflowY = overflowY;
+    });
     element.style.overflow = prev.overflow;
     element.style.height = prev.height;
     element.style.maxHeight = prev.maxHeight;
   }
 }
 
-function teamLine(inputs) {
+// Descriptive subtitle for the PDF header. Rep roles appear only when configured
+// (with a plural "s" past 1); "layered management" and "technology stack" are
+// always included per the proposal template.
+function proposalSubtitle(inputs) {
+  const role = (n, label) => n > 0 && `${n} full time dedicated ${label}${n > 1 ? "s" : ""}`;
   const parts = [
-    inputs.aeFTE > 0 && `${inputs.aeFTE} AE`,
-    inputs.sdrFTE > 0 && `${inputs.sdrFTE} SDR`,
-    inputs.isrFTE > 0 && `${inputs.isrFTE} ISR`,
+    role(inputs.sdrFTE, "SDR"),
+    role(inputs.isrFTE, "ISR"),
+    role(inputs.aeFTE, "AE"),
+    "layered management",
+    "technology stack",
+    `${inputs.programLengthMonths}mo program`,
   ].filter(Boolean);
-  const team = parts.length ? parts.join(" · ") : "No reps configured";
-  return `${team} · ${inputs.programLengthMonths}mo program`;
+  return `Generated ${longDate()} · ${parts.join(" · ")}`;
 }
 
 function drawHeader(pdf, inputs, pageW) {
@@ -242,7 +303,7 @@ function drawHeader(pdf, inputs, pageW) {
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
   pdf.setTextColor(100, 116, 139); // C.textLight
-  pdf.text(`Generated ${todayStamp()} · ${teamLine(inputs)}`, PAGE_MARGIN, PAGE_MARGIN + 32);
+  pdf.text(proposalSubtitle(inputs), PAGE_MARGIN, PAGE_MARGIN + 32);
 
   // Divider
   pdf.setDrawColor(226, 232, 240); // C.border
@@ -302,7 +363,7 @@ export async function exportToPdf(element, inputs, opts = {}) {
   }
 
   // Build PDF.
-  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+  const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "letter" });
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
 
