@@ -6,6 +6,14 @@ const fmt = (n) => n == null || isNaN(n) || !isFinite(n) ? "—" : "$" + Math.ro
 const fmtN = (n, dp = 0) => n == null || isNaN(n) ? "—" : Number(n).toFixed(dp);
 const pct = (n) => n == null || isNaN(n) || !isFinite(n) ? "—" : (n * 100).toFixed(1) + "%";
 const num = (n) => isNaN(n) || !isFinite(n) ? 0 : n;
+// Thousands separators for display inside <input> boxes; preserves decimals and sign.
+const grp = (n) => {
+  if (n == null || isNaN(n)) return "";
+  const neg = n < 0;
+  const [int, dec] = String(Math.abs(n)).split(".");
+  const withCommas = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (neg ? "-" : "") + (dec != null ? `${withCommas}.${dec}` : withCommas);
+};
 
 // —— shared style primitives ————————————————————————————————————————————————
 const C = {
@@ -51,15 +59,28 @@ function TextField({ label, value, onChange, placeholder }) {
 }
 
 function Field({ label, value, onChange, prefix = "$", suffix = "", placeholder }) {
+  // Text-backed numeric input so we can render thousands separators (1,000,000).
+  // While focused we show the raw typed text for easy editing; otherwise we group
+  // the live value with commas (derived during render — no effect needed).
+  const [focused, setFocused] = useState(false);
+  const [text, setText] = useState("");
+  const display = focused ? text : (value == null ? "" : grp(value));
   return (
     <div style={{ marginBottom: 11 }}>
       <label style={{ display: "block", fontFamily: "monospace", fontSize: 10, color: C.textLight, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</label>
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         {prefix && <span style={{ fontFamily: "monospace", fontSize: 12, color: C.textFaint }}>{prefix}</span>}
-        <input type="number" value={value ?? ""} placeholder={placeholder} onChange={(e) => {
-          const v = e.target.value;
-          onChange(v === "" ? null : Number(v));
-        }}
+        <input type="text" inputMode="decimal" value={display} placeholder={placeholder}
+          onFocus={() => { setFocused(true); setText(value == null ? "" : String(value)); }}
+          onBlur={() => setFocused(false)}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setText(raw);
+            const cleaned = raw.replace(/,/g, "");
+            if (cleaned === "") { onChange(null); return; }
+            const n = Number(cleaned);
+            if (!isNaN(n)) onChange(n);
+          }}
           style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: "monospace", fontSize: 12, padding: "5px 8px", outline: "none", width: "100%" }} />
         {suffix && <span style={{ fontFamily: "monospace", fontSize: 12, color: C.textFaint }}>{suffix}</span>}
       </div>
@@ -122,14 +143,13 @@ function Select({ label, value, onChange, options, placeholder = "— Select —
   );
 }
 
-function KPI({ label, value, sub, color = C.text, bg = C.bg, border = C.border, rightLabel, rightValue, rightColor = C.purple }) {
+function KPI({ label, value, color = C.text, bg = C.bg, border = C.border, rightLabel, rightValue, rightColor = C.purple }) {
   const hasRight = rightValue != null;
   const cardStyle = { background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "11px 14px" };
   const leftCol = (
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 19, fontWeight: 800, color, letterSpacing: "-0.5px", lineHeight: 1.1 }}>{value}</div>
-      {sub && <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, marginTop: 3 }}>{sub}</div>}
     </div>
   );
   if (!hasRight) return <div style={cardStyle}>{leftCol}</div>;
