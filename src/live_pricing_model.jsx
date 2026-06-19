@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { exportToPdf } from "./lib/exports";
+import { buildFilename, proposalSubtitle } from "./lib/exports";
 import { getCalibratedRamp, defaultRampForLength } from "./lib/calibration";
 
 const fmt = (n) => n == null || isNaN(n) || !isFinite(n) ? "—" : "$" + Math.round(n).toLocaleString("en-US");
@@ -472,10 +472,8 @@ export default function PricingModel() {
     });
   }, [programLengthMonths, vertical]);
 
-  // PDF export
+  // PDF export (native browser print path)
   const mainRef = useRef(null);
-  const pdfRef = useRef(null);
-  const [exporting, setExporting] = useState(null); // null | "pdf"
 
   // —— CALCULATIONS ————————————————————————————————————————————————————————
   const calc = useMemo(() => {
@@ -668,6 +666,29 @@ export default function PricingModel() {
     setSdrFTE(goalSeek.sdrsNeeded);
   };
 
+  // Snapshot of the raw inputs — used by the proposal header subtitle, the export
+  // filename, and the print layout.
+  const inputs = useMemo(() => ({
+    aeFTE, sdrFTE, isrFTE,
+    priceAE, priceSDR, priceISR,
+    discountAE, discountSDR, discountISR,
+    setupFee, monthlyManagement, monthlyData,
+    closeRate, avgContractValue, avgSalesCycleMonths,
+    salToSqlRate, sqlToQOppRate, qOppToSaoRate, saoWinRate,
+    programLengthMonths, ramp,
+  }), [aeFTE, sdrFTE, isrFTE, priceAE, priceSDR, priceISR, discountAE, discountSDR, discountISR,
+    setupFee, monthlyManagement, monthlyData, closeRate, avgContractValue, avgSalesCycleMonths,
+    salToSqlRate, sqlToQOppRate, qOppToSaoRate, saoWinRate, programLengthMonths, ramp]);
+
+  // Native print-to-PDF: set a sensible suggested filename, print, then restore the title.
+  const handlePrint = () => {
+    const prevTitle = document.title;
+    document.title = buildFilename(inputs, "pdf").replace(/\.pdf$/, "");
+    const restore = () => { document.title = prevTitle; window.removeEventListener("afterprint", restore); };
+    window.addEventListener("afterprint", restore);
+    window.print();
+  };
+
   // —— STYLES ————————————————————————————————————————————————————————————————
   const S = {
     root: { background: "#f1f5f9", minHeight: "100vh", color: C.text, fontFamily: "'Segoe UI', system-ui, sans-serif", display: "flex", flexDirection: "column" },
@@ -708,37 +729,17 @@ export default function PricingModel() {
           <span style={{ fontFamily: "monospace", fontSize: 11, color: C.green, fontWeight: 700 }}>Won: {calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"}</span>
           <span style={{ fontFamily: "monospace", fontSize: 11, color: C.textLight }}>Break-even: {calc.breakEven > 0 ? `Mo ${calc.breakEven}` : "—"}</span>
 
-          {/* Export PDF button */}
+          {/* Export PDF button — native browser print ("Save as PDF") */}
           <button
-            onClick={async () => {
-              setExporting("pdf");
-              try {
-                const inputs = {
-                  aeFTE, sdrFTE, isrFTE,
-                  priceAE, priceSDR, priceISR,
-                  discountAE, discountSDR, discountISR,
-                  setupFee, monthlyManagement, monthlyData,
-                  closeRate, avgContractValue, avgSalesCycleMonths,
-                  salToSqlRate, sqlToQOppRate, qOppToSaoRate, saoWinRate,
-                  programLengthMonths, ramp,
-                };
-                await exportToPdf(pdfRef.current, inputs);
-              } catch (err) {
-                console.error("Export failed:", err);
-                alert(`Export failed: ${err.message}`);
-              } finally {
-                setExporting(null);
-              }
-            }}
-            disabled={exporting !== null}
+            onClick={handlePrint}
             style={{
               fontFamily: "monospace", fontSize: 11, fontWeight: 700,
               padding: "5px 10px", border: `1px solid ${C.blueBorder}`,
-              borderRadius: 5, background: exporting ? C.bg : C.blueLight, color: C.blue,
-              cursor: exporting ? "default" : "pointer",
+              borderRadius: 5, background: C.blueLight, color: C.blue,
+              cursor: "pointer",
             }}
           >
-            {exporting === "pdf" ? "Generating PDF…" : "Export PDF"}
+            Export PDF
           </button>
 
           <div style={{ display: "flex", gap: 5 }}>
@@ -961,8 +962,6 @@ export default function PricingModel() {
         {/* —— MAIN CONTENT ————————————————————————————————————————————————— */}
         <div ref={mainRef} style={S.main}>
 
-          <div ref={pdfRef} data-pdf-root="true">
-
           {/* KPI row */}
           {(() => {
             const roiReady = calc.hasACV && calc.hasClose && calc.hasCycle && calc.totalClientSpend > 0;
@@ -1023,7 +1022,7 @@ export default function PricingModel() {
           })()}
 
           {/* FUNNEL OVERVIEW — visualization on the left, table card on the right */}
-          <div data-pdf-funnel-grid="true" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
             <FunnelViz
               counts={{
                 sals:  calc.totals.sals,
@@ -1211,8 +1210,6 @@ export default function PricingModel() {
             )}
           </div>
 
-          </div> {/* end pdfRef wrapper */}
-
           {/* Pricing strip */}
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 16px", marginBottom: 14, display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
             {sdrFTE > 0 && <>
@@ -1317,6 +1314,155 @@ export default function PricingModel() {
 
         </div>
       </div>
+
+      {/* —— PRINT-ONLY PROPOSAL (native window.print → Save as PDF) ————————————— */}
+      <style>{`
+        @media screen { .proposal-print { display: none; } }
+        @media print {
+          body * { visibility: hidden; }
+          .proposal-print, .proposal-print * { visibility: visible; }
+          .proposal-print { position: absolute; left: 0; top: 0; width: 100%; display: block; }
+          @page { size: Letter landscape; margin: 0.4in; }
+        }
+      `}</style>
+      {(() => {
+        const roiReady = calc.hasACV && calc.hasClose && calc.hasCycle && calc.totalClientSpend > 0;
+        const fmtRoi = (n) => (n == null ? "—" : (Math.round(n * 10) / 10) + "x");
+        const roiDisplay = roiReady ? fmtRoi(calc.totalWonDealValue / calc.totalClientSpend) : "—";
+        const roiY1 = roiReady ? fmtRoi(calc.lifetimeY1 / calc.totalClientSpend) : "—";
+        const roiY2 = roiReady ? fmtRoi(calc.lifetimeY2 / calc.totalClientSpend) : "—";
+        const roiY3 = roiReady ? fmtRoi(calc.lifetimeY3 / calc.totalClientSpend) : "—";
+        const revReady = calc.hasACV && calc.hasClose && calc.hasCycle;
+        const funnelRows = [
+          { label: `Total ${term("sal")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSals,       programLengthMonths, calc.steadyAvgSals),     color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
+          { label: `Total ${term("sql")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSqls,       programLengthMonths, calc.steadyAvgSqls),     color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
+          ...(isrFTE > 0 ? [
+            { label: `Total ${term("qopp")}`,             values: cumulativeAt(calc.monthly, (x) => x.qOpps,           programLengthMonths, calc.steadyAvgQOpps),    color: C.navyMid, format: (v) => fmtN(v, 0), enabled: true },
+            { label: `Total ${term("sao")}`,              values: cumulativeAt(calc.monthly, (x) => x.saos,            programLengthMonths, calc.steadyAvgSaos),     color: C.navyMid, format: (v) => fmtN(v, 0), enabled: true },
+          ] : []),
+          { label: `${term("pipeline","singular")} $`,    values: cumulativeAt(calc.monthly, (x) => x.pipelineCreated, programLengthMonths, calc.steadyAvgPipeline), color: C.greenDk, format: (v) => fmt(v),     enabled: calc.hasACV },
+          { label: `${term("deal")} Won`,                 values: cumulativeAt(calc.monthly, (x) => x.dealsWon,        programLengthMonths, calc.steadyAvgWon),      color: C.navy,    format: (v) => fmtN(v, 0), enabled: calc.hasClose },
+          { label: `Total ${term("revenue","singular")}`, values: cumulativeAt(calc.monthly, (x) => (x.dealsWon ?? 0) * (avgContractValue ?? 0), programLengthMonths, calc.steadyAvgWon * (avgContractValue ?? 0)), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
+        ];
+        let cumICV = 0;
+        return (
+          <div className="proposal-print" style={{ background: C.white, color: C.text, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+            {/* Masthead */}
+            <div style={{ background: C.navy, color: C.white, padding: "14px 18px", borderRadius: 8, marginBottom: 12 }}>
+              <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.3px" }}>MemoryBlue Pricing Proposal</div>
+              <div style={{ fontFamily: "monospace", fontSize: 11, color: "rgba(255,255,255,0.78)", marginTop: 4 }}>{proposalSubtitle(inputs)}</div>
+            </div>
+
+            {/* KPI row */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, marginBottom: 8 }}>
+              <KPI label="Monthly Investment" value={fmt(calc.monthlyClientBill)} color={C.navy} bg={C.blueSoft} border={C.blueBorder} />
+              <KPI label="Total Client Investment" value={fmt(calc.totalClientSpend)} />
+              <KPI label={`Total ${term("revenue","singular")}`} value={revReady ? fmt(calc.totalWonDealValue) : "—"} color={C.green} />
+              <KPI label="ROI" value={roiDisplay} color={C.purple} bg={C.purpleLight} border={C.purpleBorder} />
+              <KPI label="Client Break-even" value={calc.breakEven > 0 ? `Month ${calc.breakEven}` : "—"} color={C.amber} />
+            </div>
+
+            {/* Lifetime revenue row */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
+              <KPI label="Lifetime Revenue — Y1" value={revReady ? fmt(calc.lifetimeY1) : "—"} color={C.green} bg={C.blueLight} border={C.blueBorder} rightLabel="ROI" rightValue={roiY1} />
+              <KPI label="Lifetime Revenue — Y2" value={revReady ? fmt(calc.lifetimeY2) : "—"} color={C.green} bg={C.blueLight} border={C.blueBorder} rightLabel="ROI" rightValue={roiY2} />
+              <KPI label="Lifetime Revenue — Y3" value={revReady ? fmt(calc.lifetimeY3) : "—"} color={C.green} bg={C.blueLight} border={C.blueBorder} rightLabel="ROI" rightValue={roiY3} />
+            </div>
+
+            {/* Row 1: Funnel visualization */}
+            <div style={{ marginBottom: 12 }}>
+              <FunnelViz
+                counts={{ sals: calc.totals.sals, sqls: calc.totals.sqls, qOpps: calc.totals.qOpps, saos: calc.totals.saos, deals: calc.totals.deals }}
+                dollars={{ wonRev: calc.totalWonDealValue, ltY1: calc.lifetimeY1, ltY2: calc.lifetimeY2, ltY3: calc.lifetimeY3 }}
+                isrInProgram={isrFTE > 0}
+                totalClientSpend={calc.totalClientSpend}
+                term={term}
+              />
+            </div>
+
+            {/* Row 2: Funnel breakdown table */}
+            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 6, height: 18, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
+                <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
+              </div>
+              <ProjectionTable rows={funnelRows} S={S} />
+            </div>
+
+            {/* Row 3: Expected Outcomes monthly table */}
+            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+              <div style={{ padding: "8px 14px", borderBottom: `1px solid ${C.border}`, fontFamily: "monospace", fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.08em", background: C.bg, display: "flex", justifyContent: "space-between" }}>
+                <span>Expected Outcomes — Monthly Projection</span>
+                <span style={{ color: C.textFaint }}>{sdrFTE} SDR{isrFTE > 0 ? ` · ${isrFTE} ISR` : ""} · {programLengthMonths}mo program{calc.hasCycle ? ` + ${avgSalesCycleMonths}mo cycle` : ""}</span>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...S.thl, minWidth: 170 }}>Metric</th>
+                    {calc.monthly.map((o) => (
+                      <th key={o.m} style={{ ...S.th, color: o.inProgram ? C.text : C.textFaint }}>M{o.m}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ background: C.blueLight }}>
+                    <td style={{ ...S.tdl, fontWeight: 700, color: C.blue }}>{term("sal")} per SDR</td>
+                    {calc.monthly.map((o, i) => (
+                      <td key={o.m} style={S.td}>{o.inProgram ? fmtN(ramp[i] ?? 0, 0) : "—"}</td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td style={S.tdl}>Total {term("sal")}</td>
+                    {calc.monthly.map((o) => <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.totalSals, 0) : "—"}</td>)}
+                  </tr>
+                  <tr style={{ background: C.bg }}>
+                    <td style={S.tdl}>Total {term("sql")}</td>
+                    {calc.monthly.map((o) => <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.totalSqls, 0) : "—"}</td>)}
+                  </tr>
+                  {isrFTE > 0 && (
+                    <tr>
+                      <td style={S.tdl}>Total {term("qopp")}</td>
+                      {calc.monthly.map((o) => <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.qOpps, 0) : "—"}</td>)}
+                    </tr>
+                  )}
+                  {isrFTE > 0 && (
+                    <tr style={{ background: C.bg }}>
+                      <td style={S.tdl}>Total {term("sao")}</td>
+                      {calc.monthly.map((o) => <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.saos, 0) : "—"}</td>)}
+                    </tr>
+                  )}
+                  <tr>
+                    <td style={S.tdl}>Total {term("pipeline","singular")} Created</td>
+                    {calc.monthly.map((o) => (
+                      <td key={o.m} style={{ ...S.td, color: o.inProgram ? C.greenDk : C.textFaint }}>{o.inProgram && o.pipelineCreated != null ? fmt(o.pipelineCreated) : "—"}</td>
+                    ))}
+                  </tr>
+                  <tr style={{ background: C.bg }}>
+                    <td style={S.tdl}>Total {term("deal")} Won</td>
+                    {calc.monthly.map((o) => (
+                      <td key={o.m} style={{ ...S.td, color: (o.wonDealsCount ?? 0) > 0 ? C.navy : C.textFaint, fontWeight: (o.wonDealsCount ?? 0) > 0 ? 700 : 400 }}>{o.wonDealsCount == null ? "—" : fmtN(o.wonDealsCount, 0)}</td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td style={{ ...S.tdl, fontWeight: 700, color: C.text }}>Revenue Closed Won (Per Month)</td>
+                    {calc.monthly.map((o) => (
+                      <td key={o.m} style={{ ...S.td, color: (o.wonDealValue ?? 0) > 0 ? C.green : C.textFaint, fontWeight: (o.wonDealValue ?? 0) > 0 ? 700 : 400 }}>{o.wonDealValue == null ? "—" : fmt(o.wonDealValue)}</td>
+                    ))}
+                  </tr>
+                  <tr style={{ background: C.bg }}>
+                    <td style={{ ...S.tdl, fontWeight: 700, color: C.green }}>Revenue Closed Won (Cumulative)</td>
+                    {calc.monthly.map((o) => {
+                      cumICV += (o.wonDealValue ?? 0);
+                      return <td key={o.m} style={{ ...S.td, color: cumICV > 0 ? C.green : C.textFaint, fontWeight: 700 }}>{o.wonDealValue == null ? "—" : fmt(cumICV)}</td>;
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
