@@ -16,13 +16,18 @@ const grp = (n) => {
 };
 
 // —— shared style primitives ————————————————————————————————————————————————
+// memoryBlue brand palette. Navy/blue for activity, green reserved for $ values,
+// amber for break-even, purple for the ROI KPI only.
+// NOTE: FunnelViz pins its own colors to literal hex, so it is unaffected by this palette.
 const C = {
-  blue: "#1d4ed8", blueLight: "#eff6ff", blueBorder: "#bfdbfe",
-  green: "#15803d", greenLight: "#f0fdf4", greenBorder: "#bbf7d0",
-  amber: "#b45309", amberLight: "#fffbeb", amberBorder: "#fde68a",
-  purple: "#7c3aed", purpleLight: "#f5f3ff", purpleBorder: "#ddd6fe",
-  teal: "#0f766e", tealLight: "#f0fdfa", tealBorder: "#99f6e4",
-  slate: "#475569", border: "#e2e8f0", bg: "#f8fafc", white: "#ffffff",
+  navy: "#0a2d5a", navyMid: "#114a86",
+  blue: "#0d70c0", blueLight: "#e8f1fb", blueSoft: "#e8f1fb", blueBorder: "#c5ddf5",
+  green: "#1f9d57", greenDk: "#0c5e30", greenLight: "#e7f6ee", greenSoft: "#e7f6ee", greenBorder: "#bbf7d0",
+  amber: "#b8651b", amberLight: "#fbf1e6", amberBorder: "#f3d8b8",
+  purple: "#6b46c1", purpleLight: "#efeafb", purpleBorder: "#d7c9f2",
+  // teal aliases point at brand blue so existing SDR (teal) accents read as blue automatically.
+  teal: "#0d70c0", tealLight: "#e8f1fb", tealBorder: "#c5ddf5",
+  slate: "#475569", border: "#dbe3ec", bg: "#f8fafc", white: "#ffffff",
   text: "#0f172a", textMid: "#334155", textLight: "#64748b", textFaint: "#94a3b8",
 };
 
@@ -209,7 +214,8 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, term }) {
   const countInsetAt  = (k) => (k / cN) * MAX_INSET;
   const dollarInsetAt = (k) => ((dN - k) / dN) * MAX_INSET;
 
-  const ROLE_COLOR = { SDR: C.teal, ISR: C.purple, AE: C.blue };
+  // Pinned to literal hex so the brand palette sweep can't alter the funnel's identity colors.
+  const ROLE_COLOR = { SDR: "#0f766e", ISR: "#7c3aed", AE: "#1d4ed8" };
   // Determine the first row index for each role so we only render its label once.
   const firstRoleIdx = {};
   countStages.forEach((s, i) => { if (!(s.role in firstRoleIdx)) firstRoleIdx[s.role] = i; });
@@ -263,7 +269,7 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, term }) {
   return (
     <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-        <div style={{ width: 6, height: 20, background: C.green, borderRadius: 3 }} />
+        <div style={{ width: 6, height: 20, background: "#15803d", borderRadius: 3 }} />
         <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel visualization</span>
         <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>program totals</span>
       </div>
@@ -694,7 +700,7 @@ export default function PricingModel() {
       {/* —— TOP BAR ———————————————————————————————————————————————————— */}
       <div style={S.topbar}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.blue }} />
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.navy }} />
           <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>AE / SDR / ISR Pricing Model</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 20, alignItems: "center" }}>
@@ -736,9 +742,9 @@ export default function PricingModel() {
           </button>
 
           <div style={{ display: "flex", gap: 5 }}>
-            {aeFTE > 0 && <Badge color={C.blue}>{aeFTE} AE</Badge>}
-            {sdrFTE > 0 && <Badge color={C.teal}>{sdrFTE} SDR</Badge>}
-            {isrFTE > 0 && <Badge color={C.purple}>{isrFTE} ISR</Badge>}
+            {aeFTE > 0 && <Badge color={C.navy}>{aeFTE} AE</Badge>}
+            {sdrFTE > 0 && <Badge color={C.blue}>{sdrFTE} SDR</Badge>}
+            {isrFTE > 0 && <Badge color={C.navyMid}>{isrFTE} ISR</Badge>}
           </div>
         </div>
       </div>
@@ -767,16 +773,16 @@ export default function PricingModel() {
 
           {/* Role tab row */}
           <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            <button style={S.roleTab(role === "sdr", C.teal)} onClick={() => setRole("sdr")}>SDR</button>
-            <button style={S.roleTab(role === "isr", C.purple)} onClick={() => setRole("isr")}>ISR</button>
-            <button style={S.roleTab(role === "ae", C.blue)} onClick={() => setRole("ae")}>AE</button>
+            <button style={S.roleTab(role === "sdr", C.blue)} onClick={() => setRole("sdr")}>SDR</button>
+            <button style={S.roleTab(role === "isr", C.navyMid)} onClick={() => setRole("isr")}>ISR</button>
+            <button style={S.roleTab(role === "ae", C.navy)} onClick={() => setRole("ae")}>AE</button>
           </div>
 
           {/* Role legend */}
           <div style={{ fontSize: 10, color: C.textFaint, fontFamily: "monospace", marginBottom: 10, lineHeight: 1.6 }}>
-            <b style={{ color: C.teal }}>SDR</b> — Delivers meetings and opportunities<br/>
-            <b style={{ color: C.purple }}>ISR</b> — Nurtures and drives opportunities<br/>
-            <b style={{ color: C.blue }}>AE</b> — Closing Business
+            <b style={{ color: C.blue }}>SDR</b> — Delivers meetings and opportunities<br/>
+            <b style={{ color: C.navyMid }}>ISR</b> — Nurtures and drives opportunities<br/>
+            <b style={{ color: C.navy }}>AE</b> — Closing Business
           </div>
 
           {/* ——— SDR TAB ——————————————————————————————————————— */}
@@ -836,19 +842,19 @@ export default function PricingModel() {
 
           {/* ——— ISR TAB ——————————————————————————————————————— */}
           {role === "isr" && (isrFTE === 0 ? (
-            <div style={{ background: C.purpleLight, border: `1px dashed ${C.purpleBorder}`, borderRadius: 8, padding: "24px 16px", textAlign: "center", marginTop: 8 }}>
-              <div style={{ fontFamily: "monospace", fontSize: 11, color: C.purple, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>ISR not in this program</div>
+            <div style={{ background: C.blueLight, border: `1px dashed ${C.blueBorder}`, borderRadius: 8, padding: "24px 16px", textAlign: "center", marginTop: 8 }}>
+              <div style={{ fontFamily: "monospace", fontSize: 11, color: C.navyMid, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>ISR not in this program</div>
               <div style={{ fontSize: 11, color: C.textLight, marginBottom: 14, lineHeight: 1.5 }}>Add an ISR to enable inside-sales configuration for this campaign.</div>
               <button
                 onClick={() => setIsrFTE(1)}
-                style={{ padding: "8px 18px", border: "none", borderRadius: 6, background: C.purple, color: C.white, fontFamily: "monospace", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", cursor: "pointer" }}
+                style={{ padding: "8px 18px", border: "none", borderRadius: 6, background: C.navyMid, color: C.white, fontFamily: "monospace", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", cursor: "pointer" }}
               >
                 + Add ISR
               </button>
             </div>
           ) : (
             <>
-              <Collapsible title="Program Setup" accent={C.purple} defaultOpen={true}>
+              <Collapsible title="Program Setup" accent={C.navyMid} defaultOpen={true}>
                 <Field label="ISR Headcount" value={isrFTE} onChange={setIsrFTE} prefix="" />
                 <Field label={`${term("sql","singular")} to ${term("qopp","singular")} Rate`} value={sqlToQOppRate == null ? null : sqlToQOppRate * 100} onChange={(v) => setSqlToQOppRate(v == null ? null : v / 100)} prefix="" suffix="%" />
                 <Field label={`${term("qopp","singular")} to ${term("sao","singular")} Rate`} value={qOppToSaoRate == null ? null : qOppToSaoRate * 100} onChange={(v) => setQOppToSaoRate(v == null ? null : v / 100)} prefix="" suffix="%" />
@@ -856,10 +862,10 @@ export default function PricingModel() {
                 <Field label="Program Length (Months)" value={programLengthMonths} onChange={setProgramLengthMonths} prefix="" />
               </Collapsible>
 
-              <Collapsible title="ISR Costs" accent={C.purple} defaultOpen={true}>
+              <Collapsible title="ISR Costs" accent={C.navyMid} defaultOpen={true}>
                 <Field label="Price per ISR / month" value={priceISR} onChange={setPriceISR} />
                 <Field label="ISR Discount" value={discountISR} onChange={setDiscountISR} prefix="" suffix="%" />
-                <div style={{ fontFamily: "monospace", fontSize: 11, color: C.purple, marginBottom: 10, background: C.purpleLight, borderRadius: 5, padding: "4px 8px" }}>End price: {fmt(calc.endISR)}/mo</div>
+                <div style={{ fontFamily: "monospace", fontSize: 11, color: C.navyMid, marginBottom: 10, background: C.blueLight, borderRadius: 5, padding: "4px 8px" }}>End price: {fmt(calc.endISR)}/mo</div>
               </Collapsible>
 
               <button
@@ -874,27 +880,27 @@ export default function PricingModel() {
           {/* ——— AE TAB ———————————————————————————————————————— */}
           {role === "ae" && (aeFTE === 0 ? (
             <div style={{ background: C.blueLight, border: `1px dashed ${C.blueBorder}`, borderRadius: 8, padding: "24px 16px", textAlign: "center", marginTop: 8 }}>
-              <div style={{ fontFamily: "monospace", fontSize: 11, color: C.blue, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>AE not in this program</div>
+              <div style={{ fontFamily: "monospace", fontSize: 11, color: C.navy, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>AE not in this program</div>
               <div style={{ fontSize: 11, color: C.textLight, marginBottom: 14, lineHeight: 1.5 }}>Add an AE to close SDR-sourced pipeline in this campaign.</div>
               <button
                 onClick={() => setAeFTE(1)}
-                style={{ padding: "8px 18px", border: "none", borderRadius: 6, background: C.blue, color: C.white, fontFamily: "monospace", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", cursor: "pointer" }}
+                style={{ padding: "8px 18px", border: "none", borderRadius: 6, background: C.navy, color: C.white, fontFamily: "monospace", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", cursor: "pointer" }}
               >
                 + Add AE
               </button>
             </div>
           ) : (
             <>
-              <Collapsible title="Program Setup" accent={C.blue} defaultOpen={true}>
+              <Collapsible title="Program Setup" accent={C.navy} defaultOpen={true}>
                 <Field label="AE Headcount" value={aeFTE} onChange={setAeFTE} prefix="" />
                 <Field label={`${term("sal","singular")} to ${term("sql","singular")} Rate`} value={salToSqlRate == null ? null : salToSqlRate * 100} onChange={(v) => setSalToSqlRate(v == null ? null : v / 100)} prefix="" suffix="%" />
                 <Field label="Program Length (Months)" value={programLengthMonths} onChange={setProgramLengthMonths} prefix="" />
               </Collapsible>
 
-              <Collapsible title="AE Costs" accent={C.blue} defaultOpen={true}>
+              <Collapsible title="AE Costs" accent={C.navy} defaultOpen={true}>
                 <Field label="Price per AE / month" value={priceAE} onChange={setPriceAE} />
                 <Field label="AE Discount" value={discountAE} onChange={setDiscountAE} prefix="" suffix="%" />
-                <div style={{ fontFamily: "monospace", fontSize: 11, color: C.blue, marginBottom: 10, background: C.blueLight, borderRadius: 5, padding: "4px 8px" }}>End price: {fmt(calc.endAE)}/mo</div>
+                <div style={{ fontFamily: "monospace", fontSize: 11, color: C.navy, marginBottom: 10, background: C.blueLight, borderRadius: 5, padding: "4px 8px" }}>End price: {fmt(calc.endAE)}/mo</div>
               </Collapsible>
 
               <button
@@ -964,7 +970,7 @@ export default function PricingModel() {
             const roiDisplay = roiNum == null ? "—" : (Math.round(roiNum * 10) / 10) + "x";
             return (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 16 }}>
-                <KPI label="Monthly Investment" value={fmt(calc.monthlyClientBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR + mgmt + data`} color={C.blue} bg={C.blueLight} border={C.blueBorder} />
+                <KPI label="Monthly Investment" value={fmt(calc.monthlyClientBill)} sub={`${aeFTE}AE · ${sdrFTE}SDR · ${isrFTE}ISR + mgmt + data`} color={C.navy} bg={C.blueSoft} border={C.blueBorder} />
                 <KPI label="Total Client Investment" value={fmt(calc.totalClientSpend)} sub="Program total (billing + fees + setup)" />
                 <KPI label={`Total ${term("revenue","singular")}`} value={calc.hasACV && calc.hasClose && calc.hasCycle ? fmt(calc.totalWonDealValue) : "—"} sub="ICV closed from program pipeline" color={C.green} />
                 <KPI label="ROI" value={roiDisplay} sub="Won revenue ÷ client investment" color={C.purple} bg={C.purpleLight} border={C.purpleBorder} />
@@ -1039,7 +1045,7 @@ export default function PricingModel() {
 
             <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <div style={{ width: 6, height: 20, background: isrFTE > 0 ? C.purple : C.teal, borderRadius: 3 }} />
+                <div style={{ width: 6, height: 20, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
                 <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
                 <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
               </div>
@@ -1047,14 +1053,14 @@ export default function PricingModel() {
                 <ProjectionTable
                   fill
                   rows={[
-                    { label: `Total ${term("sal")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSals,       programLengthMonths, calc.steadyAvgSals),                                color: C.teal,    format: (v) => fmtN(v, 0), enabled: true },
-                    { label: `Total ${term("sql")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSqls,       programLengthMonths, calc.steadyAvgSqls),                                color: "#0d9488", format: (v) => fmtN(v, 0), enabled: true },
+                    { label: `Total ${term("sal")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSals,       programLengthMonths, calc.steadyAvgSals),                                color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
+                    { label: `Total ${term("sql")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSqls,       programLengthMonths, calc.steadyAvgSqls),                                color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
                     ...(isrFTE > 0 ? [
-                      { label: `Total ${term("qopp")}`,             values: cumulativeAt(calc.monthly, (x) => x.qOpps,           programLengthMonths, calc.steadyAvgQOpps),                               color: C.purple,  format: (v) => fmtN(v, 0), enabled: true },
-                      { label: `Total ${term("sao")}`,              values: cumulativeAt(calc.monthly, (x) => x.saos,            programLengthMonths, calc.steadyAvgSaos),                                color: "#7c3aed", format: (v) => fmtN(v, 0), enabled: true },
+                      { label: `Total ${term("qopp")}`,             values: cumulativeAt(calc.monthly, (x) => x.qOpps,           programLengthMonths, calc.steadyAvgQOpps),                               color: C.navyMid, format: (v) => fmtN(v, 0), enabled: true },
+                      { label: `Total ${term("sao")}`,              values: cumulativeAt(calc.monthly, (x) => x.saos,            programLengthMonths, calc.steadyAvgSaos),                                color: C.navyMid, format: (v) => fmtN(v, 0), enabled: true },
                     ] : []),
-                    { label: `${term("pipeline","singular")} $`,    values: cumulativeAt(calc.monthly, (x) => x.pipelineCreated, programLengthMonths, calc.steadyAvgPipeline),                            color: C.amber,   format: (v) => fmt(v),     enabled: calc.hasACV },
-                    { label: `${term("deal")} Won`,                 values: cumulativeAt(calc.monthly, (x) => x.dealsWon,        programLengthMonths, calc.steadyAvgWon),                                 color: C.blue,    format: (v) => fmtN(v, 0), enabled: calc.hasClose },
+                    { label: `${term("pipeline","singular")} $`,    values: cumulativeAt(calc.monthly, (x) => x.pipelineCreated, programLengthMonths, calc.steadyAvgPipeline),                            color: C.greenDk, format: (v) => fmt(v),     enabled: calc.hasACV },
+                    { label: `${term("deal")} Won`,                 values: cumulativeAt(calc.monthly, (x) => x.dealsWon,        programLengthMonths, calc.steadyAvgWon),                                 color: C.navy,    format: (v) => fmtN(v, 0), enabled: calc.hasClose },
                     { label: `Total ${term("revenue","singular")}`, values: cumulativeAt(calc.monthly, (x) => (x.dealsWon ?? 0) * (avgContractValue ?? 0), programLengthMonths, calc.steadyAvgWon * (avgContractValue ?? 0)), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
                   ]}
                   S={S}
@@ -1216,11 +1222,11 @@ export default function PricingModel() {
             </>}
             {isrFTE > 0 && <>
               <div style={{ color: C.border }}>|</div>
-              <div><span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>ISR </span><span style={{ fontSize: 15, fontWeight: 800, color: C.purple }}>{fmt(calc.endISR)}/mo</span></div>
+              <div><span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>ISR </span><span style={{ fontSize: 15, fontWeight: 800, color: C.navyMid }}>{fmt(calc.endISR)}/mo</span></div>
             </>}
             {aeFTE > 0 && <>
               <div style={{ color: C.border }}>|</div>
-              <div><span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>AE </span><span style={{ fontSize: 15, fontWeight: 800, color: C.blue }}>{fmt(calc.endAE)}/mo</span></div>
+              <div><span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>AE </span><span style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{fmt(calc.endAE)}/mo</span></div>
             </>}
             <div style={{ color: C.border }}>|</div>
             <div><span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>Variable % </span><span style={{ fontSize: 15, fontWeight: 800, color: C.amber }}>{pct(varPct)}</span></div>
