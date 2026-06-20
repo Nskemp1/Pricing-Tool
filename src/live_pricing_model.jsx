@@ -238,7 +238,7 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
     { label: "Year 3",                          short: "Year 3", value: ltY3,   roi: totalClientSpend > 0 ? ltY3 / totalClientSpend : null },
   ];
   // Enlarged geometry. viewBox units; SVG scales responsively to its container.
-  const LT_W = 320, LT_H = 150, LT_PAD_L = 6, LT_PAD_R = 6, LT_TOP = 16, LT_BOT = 34;
+  const LT_W = 320, LT_H = 175, LT_PAD_L = 6, LT_PAD_R = 6, LT_TOP = 16, LT_BOT = 34;
   const maxV = Math.max(...ltPoints.map((p) => p.value || 0), 1);
   const xAt = (i) => LT_PAD_L + (i / (ltPoints.length - 1)) * (LT_W - LT_PAD_L - LT_PAD_R);
   const yAt = (v) => LT_TOP + (1 - (v || 0) / maxV) * (LT_H - LT_TOP - LT_BOT);
@@ -309,7 +309,7 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
         <div style={{ background: C.border }} />
 
         {/* ——— RIGHT: dollar outcomes ——————————————————————————————————— */}
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           {/* Pipeline Created hero */}
           <div style={{ background: NAVY, borderRadius: 10, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
             <div>
@@ -320,7 +320,7 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
           </div>
 
           {/* Won revenue + lifetime graph */}
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,0.85fr) minmax(0,1.15fr)", gap: 16, alignItems: "start", flex: 1 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,0.8fr) minmax(0,1.2fr)", gap: 16, alignItems: "start" }}>
             {/* Won revenue block */}
             <div>
               <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase" }}>Won revenue</div>
@@ -377,8 +377,9 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
             </div>
           )}
 
-          {/* Legend */}
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+          {/* Legend — pinned to the bottom so any spare column height collects
+              below the graph/economics, not as a gap between them. */}
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: "auto", paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.textLight }}><span style={{ width: 11, height: 11, borderRadius: 3, background: NAVY }} />{term("pipeline", "singular")} created</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.textLight }}><span style={{ width: 11, height: 11, borderRadius: 3, background: GREEN }} />Realized revenue</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.textLight }}><span style={{ width: 11, height: 11, borderRadius: "50%", border: `2.5px solid ${GREEN_MID}`, background: C.white }} />Projected lifetime</span>
