@@ -1418,7 +1418,7 @@ export default function PricingModel() {
             </div>
 
             {/* Row 1: Funnel visualization */}
-            <div className="funnel-print-wrap" style={{ marginBottom: 20 }}>
+            <div className="funnel-print-wrap" style={{ marginBottom: 30 }}>
               <FunnelViz
                 counts={{ sals: calc.totals.sals, sqls: calc.totals.sqls, qOpps: calc.totals.qOpps, saos: calc.totals.saos, deals: calc.totals.deals }}
                 dollars={{ wonRev: calc.totalWonDealValue, ltY1: calc.lifetimeY1, ltY2: calc.lifetimeY2, ltY3: calc.lifetimeY3, pipeline: calc.totals.pipeline }}
