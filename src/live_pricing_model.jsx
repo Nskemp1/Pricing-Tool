@@ -1372,14 +1372,16 @@ export default function PricingModel() {
           /* print-color-adjust: exact forces backgrounds/fills (KPI boxes, navy hero,
              funnel bars, row shading) to actually render — browsers drop them otherwise. */
           .proposal-print, .proposal-print * { visibility: visible; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-          .proposal-print { position: absolute; left: 0; top: 0; width: 100%; display: block; }
+          .proposal-print { position: absolute; left: 0; top: 0; width: 100%; display: block; box-sizing: border-box; padding: 0.3in; }
           /* Cap funnel height so the funnel + Expected Outcomes both fit one page.
              2.9in is tuned for the tallest case: ISR on = 5 bars + Deal Economics strip. */
           .proposal-print .funnel-print-wrap { max-height: 2.9in; overflow: hidden; break-inside: avoid; -webkit-column-break-inside: avoid; }
           /* Compress the Expected Outcomes rows so the table stays on page 1.
              !important overrides the inline S.td/S.th padding. */
           .proposal-print table th, .proposal-print table td { padding-top: 2px !important; padding-bottom: 2px !important; }
-          @page { size: Letter landscape; margin: 0.4in; }
+          /* margin: 0 suppresses the browser's own header/footer (date, title, URL,
+             page number); the 0.3in page inset is applied as padding on .proposal-print. */
+          @page { size: Letter landscape; margin: 0; }
         }
       `}</style>
       {(() => {
@@ -1416,7 +1418,7 @@ export default function PricingModel() {
             </div>
 
             {/* Row 1: Funnel visualization */}
-            <div className="funnel-print-wrap" style={{ marginBottom: 8 }}>
+            <div className="funnel-print-wrap" style={{ marginBottom: 20 }}>
               <FunnelViz
                 counts={{ sals: calc.totals.sals, sqls: calc.totals.sqls, qOpps: calc.totals.qOpps, saos: calc.totals.saos, deals: calc.totals.deals }}
                 dollars={{ wonRev: calc.totalWonDealValue, ltY1: calc.lifetimeY1, ltY2: calc.lifetimeY2, ltY3: calc.lifetimeY3, pipeline: calc.totals.pipeline }}
