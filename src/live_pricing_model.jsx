@@ -1374,8 +1374,9 @@ export default function PricingModel() {
           .proposal-print, .proposal-print * { visibility: visible; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
           .proposal-print { position: absolute; left: 0; top: 0; width: 100%; display: block; box-sizing: border-box; padding: 0.3in; }
           /* Cap funnel height so the funnel + Expected Outcomes both fit one page.
-             2.9in is tuned for the tallest case: ISR on = 5 bars + Deal Economics strip. */
-          .proposal-print .funnel-print-wrap { max-height: 2.9in; overflow: hidden; break-inside: avoid; -webkit-column-break-inside: avoid; }
+             3.4in clears the full funnel (incl. the Deals Won bar + win-rate footer)
+             for the ISR-off case while still leaving Expected Outcomes on page 1. */
+          .proposal-print .funnel-print-wrap { max-height: 3.4in; overflow: hidden; break-inside: avoid; -webkit-column-break-inside: avoid; }
           /* Compress the Expected Outcomes rows so the table stays on page 1.
              !important overrides the inline S.td/S.th padding. */
           .proposal-print table th, .proposal-print table td { padding-top: 2px !important; padding-bottom: 2px !important; }
