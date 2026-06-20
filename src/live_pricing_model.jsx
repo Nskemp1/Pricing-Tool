@@ -172,6 +172,16 @@ function KPI({ label, value, color = C.text, bg = C.bg, border = C.border, right
 const PROJECTION_MILESTONES = [3, 6, 12, 24];
 const PROJECTION_LABELS = ["M3", "M6", "Year 1", "Year 2"];
 
+// Cumulative-through-milestone with steady-state extrapolation past program end.
+function cumulativeAt(monthlyArr, getter, programLength, steadyPerMonth) {
+  return PROJECTION_MILESTONES.map((m) => {
+    const inSlice = monthlyArr.slice(0, Math.min(m, programLength));
+    const sumIn = inSlice.reduce((a, x) => a + (getter(x) ?? 0), 0);
+    const extension = m > programLength ? (m - programLength) * steadyPerMonth : 0;
+    return sumIn + extension;
+  });
+}
+
 // ============================================================================
 // FunnelViz
 // Layout: left = converging count funnel (stage bars, width = volume, per-stage
@@ -1120,6 +1130,35 @@ export default function PricingModel() {
               term={term}
             />
           </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <div style={{ width: 6, height: 20, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
+                <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
+              </div>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                <ProjectionTable
+                  rows={[
+                    { label: `Total ${term("sal")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSals,       programLengthMonths, calc.steadyAvgSals),                                color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
+                    { label: `Total ${term("sql")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSqls,       programLengthMonths, calc.steadyAvgSqls),                                color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
+                    ...(isrFTE > 0 ? [
+                      { label: `Total ${term("qopp")}`,             values: cumulativeAt(calc.monthly, (x) => x.qOpps,           programLengthMonths, calc.steadyAvgQOpps),                               color: C.navyMid, format: (v) => fmtN(v, 0), enabled: true },
+                      { label: `Total ${term("sao")}`,              values: cumulativeAt(calc.monthly, (x) => x.saos,            programLengthMonths, calc.steadyAvgSaos),                                color: C.navyMid, format: (v) => fmtN(v, 0), enabled: true },
+                    ] : []),
+                    { label: `${term("pipeline","singular")} $`,    values: cumulativeAt(calc.monthly, (x) => x.pipelineCreated, programLengthMonths, calc.steadyAvgPipeline),                            color: C.greenDk, format: (v) => fmt(v),     enabled: calc.hasACV },
+                    { label: `${term("deal")} Won`,                 values: cumulativeAt(calc.monthly, (x) => x.dealsWon,        programLengthMonths, calc.steadyAvgWon),                                 color: C.navy,    format: (v) => fmtN(v, 0), enabled: calc.hasClose },
+                    { label: `Total ${term("revenue","singular")}`, values: cumulativeAt(calc.monthly, (x) => (x.dealsWon ?? 0) * (avgContractValue ?? 0), programLengthMonths, calc.steadyAvgWon * (avgContractValue ?? 0)), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
+                  ]}
+                  S={S}
+                />
+              </div>
+              <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, textTransform: "uppercase" }}>Total {term("revenue","singular")} (program)</span>
+                <span style={{ fontSize: 16, fontWeight: 800, color: C.green }}>{(calc.hasACV && calc.hasClose && calc.hasCycle) ? fmt(calc.monthly.reduce((a, x) => a + (x.wonDealValue ?? 0), 0)) : "—"}</span>
+              </div>
+            </div>
+          </div>
 
           {/* Expected Outcomes — inline table with editable ramp rows */}
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "auto", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 14 }}>
@@ -1373,13 +1412,18 @@ export default function PricingModel() {
              funnel bars, row shading) to actually render — browsers drop them otherwise. */
           .proposal-print, .proposal-print * { visibility: visible; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
           .proposal-print { position: absolute; left: 0; top: 0; width: 100%; display: block; box-sizing: border-box; padding: 0.3in; }
-          /* Cap funnel height so the funnel + Expected Outcomes both fit one page.
-             3.4in clears the full funnel (incl. the Deals Won bar + win-rate footer)
-             for the ISR-off case while still leaving Expected Outcomes on page 1. */
-          .proposal-print .funnel-print-wrap { max-height: 3.4in; overflow: hidden; break-inside: avoid; -webkit-column-break-inside: avoid; }
-          /* Compress the Expected Outcomes rows so the table stays on page 1.
-             !important overrides the inline S.td/S.th padding. */
+          /* Page 1 = masthead + KPIs + funnel. The funnel has the page to itself, so
+             it's no longer height-capped — nothing clips. */
+          .proposal-print .funnel-print-wrap { break-inside: avoid; -webkit-column-break-inside: avoid; }
+          /* Page 2 begins at the funnel table; keep funnel table + Expected Outcomes
+             from splitting mid-element. */
+          .proposal-print .pb-before { break-before: page; page-break-before: always; }
+          .proposal-print .funnel-table-print { break-inside: avoid; -webkit-column-break-inside: avoid; }
+          /* Compress table rows vertically. !important overrides inline S.td/S.th padding. */
           .proposal-print table th, .proposal-print table td { padding-top: 2px !important; padding-bottom: 2px !important; }
+          /* Expected Outcomes: shrink font + side padding so every month column fits
+             the page width with no right-edge cut-off. */
+          .proposal-print .eo-print table th, .proposal-print .eo-print table td { font-size: 8.5px !important; padding-left: 3px !important; padding-right: 3px !important; }
           /* margin: 0 suppresses the browser's own header/footer (date, title, URL,
              page number); the 0.3in page inset is applied as padding on .proposal-print. */
           @page { size: Letter landscape; margin: 0; }
@@ -1393,6 +1437,17 @@ export default function PricingModel() {
         const roiY2 = roiReady ? fmtRoi(calc.lifetimeY2 / calc.totalClientSpend) : "—";
         const roiY3 = roiReady ? fmtRoi(calc.lifetimeY3 / calc.totalClientSpend) : "—";
         const revReady = calc.hasACV && calc.hasClose && calc.hasCycle;
+        const funnelRows = [
+          { label: `Total ${term("sal")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSals,       programLengthMonths, calc.steadyAvgSals),     color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
+          { label: `Total ${term("sql")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSqls,       programLengthMonths, calc.steadyAvgSqls),     color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
+          ...(isrFTE > 0 ? [
+            { label: `Total ${term("qopp")}`,             values: cumulativeAt(calc.monthly, (x) => x.qOpps,           programLengthMonths, calc.steadyAvgQOpps),    color: C.navyMid, format: (v) => fmtN(v, 0), enabled: true },
+            { label: `Total ${term("sao")}`,              values: cumulativeAt(calc.monthly, (x) => x.saos,            programLengthMonths, calc.steadyAvgSaos),     color: C.navyMid, format: (v) => fmtN(v, 0), enabled: true },
+          ] : []),
+          { label: `${term("pipeline","singular")} $`,    values: cumulativeAt(calc.monthly, (x) => x.pipelineCreated, programLengthMonths, calc.steadyAvgPipeline), color: C.greenDk, format: (v) => fmt(v),     enabled: calc.hasACV },
+          { label: `${term("deal")} Won`,                 values: cumulativeAt(calc.monthly, (x) => x.dealsWon,        programLengthMonths, calc.steadyAvgWon),      color: C.navy,    format: (v) => fmtN(v, 0), enabled: calc.hasClose },
+          { label: `Total ${term("revenue","singular")}`, values: cumulativeAt(calc.monthly, (x) => (x.dealsWon ?? 0) * (avgContractValue ?? 0), programLengthMonths, calc.steadyAvgWon * (avgContractValue ?? 0)), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
+        ];
         let cumICV = 0;
         return (
           <div className="proposal-print" style={{ background: C.white, color: C.text, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
@@ -1430,8 +1485,18 @@ export default function PricingModel() {
               />
             </div>
 
-            {/* Row 2: Expected Outcomes monthly table */}
-            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+            {/* PAGE 2 — Funnel breakdown table (forced onto a new page) */}
+            <div className="funnel-table-print pb-before" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 6, height: 18, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
+                <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
+                <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
+              </div>
+              <ProjectionTable rows={funnelRows} S={S} />
+            </div>
+
+            {/* PAGE 2 — Expected Outcomes monthly table */}
+            <div className="eo-print" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
               <div style={{ padding: "8px 14px", borderBottom: `1px solid ${C.border}`, fontFamily: "monospace", fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.08em", background: C.bg, display: "flex", justifyContent: "space-between" }}>
                 <span>Expected Outcomes — Monthly Projection</span>
                 <span style={{ color: C.textFaint }}>{sdrFTE} SDR{isrFTE > 0 ? ` · ${isrFTE} ISR` : ""} · {programLengthMonths}mo program{calc.hasCycle ? ` + ${avgSalesCycleMonths}mo cycle` : ""}</span>
