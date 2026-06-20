@@ -1451,6 +1451,8 @@ export default function PricingModel() {
         let cumICV = 0;
         return (
           <div className="proposal-print" style={{ background: C.white, color: C.text, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+            {/* PAGE 1 — masthead + KPIs + funnel, with the funnel table pinned to the bottom */}
+            <div className="page-1" style={{ display: "flex", flexDirection: "column", minHeight: "7.6in" }}>
             {/* Masthead */}
             <div style={{ background: C.navy, color: C.white, padding: "10px 16px", borderRadius: 8, marginBottom: 8 }}>
               <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.3px" }}>MemoryBlue Pricing Proposal</div>
@@ -1473,8 +1475,8 @@ export default function PricingModel() {
               <KPI label="Lifetime Revenue — Y3" value={revReady ? fmt(calc.lifetimeY3) : "—"} color={C.green} bg={C.blueLight} border={C.blueBorder} rightLabel="ROI" rightValue={roiY3} />
             </div>
 
-            {/* Row 1: Funnel visualization */}
-            <div className="funnel-print-wrap" style={{ marginBottom: 30 }}>
+            {/* Funnel visualization */}
+            <div className="funnel-print-wrap" style={{ marginBottom: 16 }}>
               <FunnelViz
                 counts={{ sals: calc.totals.sals, sqls: calc.totals.sqls, qOpps: calc.totals.qOpps, saos: calc.totals.saos, deals: calc.totals.deals }}
                 dollars={{ wonRev: calc.totalWonDealValue, ltY1: calc.lifetimeY1, ltY2: calc.lifetimeY2, ltY3: calc.lifetimeY3, pipeline: calc.totals.pipeline }}
@@ -1485,8 +1487,8 @@ export default function PricingModel() {
               />
             </div>
 
-            {/* PAGE 2 — Funnel breakdown table (forced onto a new page) */}
-            <div className="funnel-table-print pb-before" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+            {/* Funnel breakdown table — pinned to the bottom of page 1 */}
+            <div className="funnel-table-print" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginTop: "auto" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <div style={{ width: 6, height: 18, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
                 <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
@@ -1494,9 +1496,10 @@ export default function PricingModel() {
               </div>
               <ProjectionTable rows={funnelRows} S={S} />
             </div>
+            </div>{/* end PAGE 1 */}
 
-            {/* PAGE 2 — Expected Outcomes monthly table */}
-            <div className="eo-print" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+            {/* PAGE 2 — Expected Outcomes monthly table (forced onto a new page) */}
+            <div className="eo-print pb-before" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
               <div style={{ padding: "8px 14px", borderBottom: `1px solid ${C.border}`, fontFamily: "monospace", fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.08em", background: C.bg, display: "flex", justifyContent: "space-between" }}>
                 <span>Expected Outcomes — Monthly Projection</span>
                 <span style={{ color: C.textFaint }}>{sdrFTE} SDR{isrFTE > 0 ? ` · ${isrFTE} ISR` : ""} · {programLengthMonths}mo program{calc.hasCycle ? ` + ${avgSalesCycleMonths}mo cycle` : ""}</span>
