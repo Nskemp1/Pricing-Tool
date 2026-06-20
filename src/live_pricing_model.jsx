@@ -186,15 +186,19 @@ function cumulativeAt(monthlyArr, getter, programLength, steadyPerMonth) {
 // FunnelViz
 // Layout: left = converging count funnel (stage bars, width = volume, per-stage
 // conversion %, overall win rate footer). Right = Pipeline Created hero, Won
-// Revenue + ROI, and an enlarged pure-SVG lifetime-revenue line (print-safe).
+// Revenue + ROI, an enlarged pure-SVG lifetime-revenue line (print-safe), and —
+// when ISR is in the program — a Deal Economics strip that fills the extra height
+// the taller 5-bar funnel creates. The right column flexes (space-between) so it
+// stays balanced whether the funnel is 3 bars (ISR off) or 5 bars (ISR on).
 //
 // All colors pinned to literal hex so the brand-palette sweep in `C` can't alter
 // the funnel's identity colors. Uses the `fmt`, `fmtN`, `pct`, `C`, and `term`
 // already in scope in this file.
 // ============================================================================
-function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, term }) {
+function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics, term }) {
   const { sals, sqls, qOpps, saos, deals } = counts;
   const { wonRev, ltY1, ltY2, ltY3, pipeline } = dollars;
+  const econ = economics || {};
 
   // —— Count stages (left funnel) ——————————————————————————————————————————
   // ISR stages (Q-Opps, SAOs) are inserted only when ISR is in the program.
@@ -305,7 +309,7 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, term }) {
         <div style={{ background: C.border }} />
 
         {/* ——— RIGHT: dollar outcomes ——————————————————————————————————— */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
           {/* Pipeline Created hero */}
           <div style={{ background: NAVY, borderRadius: 10, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
             <div>
@@ -336,10 +340,10 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, term }) {
                 <polyline points={linePts} fill="none" stroke={GREEN_MID} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
                 {ltPoints.map((p, i) => {
                   const x = xAt(i), y = yAt(p.value);
-                  const last = i === ltPoints.length - 1;
+                  const realized = i === 0; // only the first point (Won) is recognized cash; Y1–Y3 are projected
                   return (
                     <g key={i}>
-                      <circle cx={x} cy={y} r={last ? 5 : 4} fill={last ? GREEN_MID : C.white} stroke={GREEN_MID} strokeWidth="2.5" />
+                      <circle cx={x} cy={y} r={realized ? 5 : 4} fill={realized ? GREEN_MID : C.white} stroke={GREEN_MID} strokeWidth="2.5" />
                       <text x={Math.min(Math.max(x, 18), LT_W - 18)} y={y - 9} textAnchor="middle" fontFamily="monospace" fontSize="10" fontWeight="700" fill={GREEN}>{compactUSD(p.value)}</text>
                       <text x={x} y={LT_H - 17} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={C.textLight}>{p.short}</text>
                       <text x={x} y={LT_H - 5} textAnchor="middle" fontFamily="monospace" fontSize="9" fontWeight="700" fill={C.textFaint}>{roiTxt(p.roi)}</text>
@@ -349,6 +353,29 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, term }) {
               </svg>
             </div>
           </div>
+
+          {/* Deal economics — fills the extra height the 5-bar ISR funnel creates.
+              Renders only when ISR is in the program (same condition that adds the
+              Q-Opps/SAOs bars on the left). Values come from `economics`. */}
+          {isrInProgram && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Deal economics</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px" }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 9, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.05em" }}>Avg contract</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{econ.acv == null ? "—" : fmt(econ.acv)}</div>
+                </div>
+                <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px" }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 9, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.05em" }}>{isrInProgram ? "SAO win" : "Close rate"}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{econ.closeRate == null ? "—" : pct(econ.closeRate).replace(".0", "")}</div>
+                </div>
+                <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px" }}>
+                  <div style={{ fontFamily: "monospace", fontSize: 9, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.05em" }}>Sales cycle</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{econ.cycleMonths == null ? "—" : `${fmtN(econ.cycleMonths, 0)} mo`}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Legend */}
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
@@ -1092,6 +1119,11 @@ export default function PricingModel() {
                 ltY3:     calc.lifetimeY3,
                 pipeline: calc.totals.pipeline,
               }}
+              economics={{
+                acv:         avgContractValue,
+                closeRate:   isrFTE > 0 ? saoWinRate : closeRate,
+                cycleMonths: avgSalesCycleMonths,
+              }}
               isrInProgram={isrFTE > 0}
               totalClientSpend={calc.totalClientSpend}
               term={term}
@@ -1377,8 +1409,9 @@ export default function PricingModel() {
           body * { visibility: hidden; }
           .proposal-print, .proposal-print * { visibility: visible; }
           .proposal-print { position: absolute; left: 0; top: 0; width: 100%; display: block; }
-          /* Keep the redesigned funnel from dominating page 1; never split it or its table. */
-          .proposal-print .funnel-print-wrap { max-height: 2.7in; overflow: hidden; }
+          /* Keep the redesigned funnel from dominating page 1; never split it or its table.
+             2.9in is tuned for the tallest case: ISR on = 5 bars + the Deal Economics strip. */
+          .proposal-print .funnel-print-wrap { max-height: 2.9in; overflow: hidden; }
           .proposal-print .funnel-print-wrap,
           .proposal-print .funnel-table-print { break-inside: avoid; -webkit-column-break-inside: avoid; }
           @page { size: Letter landscape; margin: 0.4in; }
@@ -1433,6 +1466,7 @@ export default function PricingModel() {
               <FunnelViz
                 counts={{ sals: calc.totals.sals, sqls: calc.totals.sqls, qOpps: calc.totals.qOpps, saos: calc.totals.saos, deals: calc.totals.deals }}
                 dollars={{ wonRev: calc.totalWonDealValue, ltY1: calc.lifetimeY1, ltY2: calc.lifetimeY2, ltY3: calc.lifetimeY3, pipeline: calc.totals.pipeline }}
+                economics={{ acv: avgContractValue, closeRate: isrFTE > 0 ? saoWinRate : closeRate, cycleMonths: avgSalesCycleMonths }}
                 isrInProgram={isrFTE > 0}
                 totalClientSpend={calc.totalClientSpend}
                 term={term}
