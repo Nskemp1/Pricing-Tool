@@ -238,7 +238,7 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
     { label: "Year 3",                          short: "Year 3", value: ltY3,   roi: totalClientSpend > 0 ? ltY3 / totalClientSpend : null },
   ];
   // Enlarged geometry. viewBox units; SVG scales responsively to its container.
-  const LT_W = 320, LT_H = 175, LT_PAD_L = 6, LT_PAD_R = 6, LT_TOP = 16, LT_BOT = 34;
+  const LT_W = 320, LT_H = 175, LT_PAD_L = 26, LT_PAD_R = 26, LT_TOP = 16, LT_BOT = 34;
   const maxV = Math.max(...ltPoints.map((p) => p.value || 0), 1);
   const xAt = (i) => LT_PAD_L + (i / (ltPoints.length - 1)) * (LT_W - LT_PAD_L - LT_PAD_R);
   const yAt = (v) => LT_TOP + (1 - (v || 0) / maxV) * (LT_H - LT_TOP - LT_BOT);
