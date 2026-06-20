@@ -182,127 +182,181 @@ function cumulativeAt(monthlyArr, getter, programLength, steadyPerMonth) {
   });
 }
 
+// ============================================================================
+// FunnelViz
+// Layout: left = converging count funnel (stage bars, width = volume, per-stage
+// conversion %, overall win rate footer). Right = Pipeline Created hero, Won
+// Revenue + ROI, and an enlarged pure-SVG lifetime-revenue line (print-safe).
+//
+// All colors pinned to literal hex so the brand-palette sweep in `C` can't alter
+// the funnel's identity colors. Uses the `fmt`, `fmtN`, `pct`, `C`, and `term`
+// already in scope in this file.
+// ============================================================================
 function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, term }) {
   const { sals, sqls, qOpps, saos, deals } = counts;
-  const { wonRev, ltY1, ltY2, ltY3 } = dollars;
+  const { wonRev, ltY1, ltY2, ltY3, pipeline } = dollars;
 
-  // Count stages narrow top-down — warm orange/brown family that blends together.
+  // —— Count stages (left funnel) ——————————————————————————————————————————
+  // ISR stages (Q-Opps, SAOs) are inserted only when ISR is in the program.
+  // Blue family, darkening downward.
   const countStages = [
-    { label: `Total ${term("sal")}`,  value: sals,  role: "SDR", color: "#c2660a" }, // burnt orange
-    { label: `Total ${term("sql")}`,  value: sqls,  role: "SDR", color: "#d97706" }, // orange
+    { label: `Total ${term("sal")}`,  value: sals,  role: "SDR · ENTRY", color: "#185fa5" },
+    { label: `Total ${term("sql")}`,  value: sqls,  role: "SDR",         color: "#378add" },
     ...(isrInProgram ? [
-      { label: `Total ${term("qopp")}`, value: qOpps, role: "ISR", color: "#e09660" }, // light peach
-      { label: `Total ${term("sao")}`,  value: saos,  role: "ISR", color: "#b8602a" }, // medium orange-brown
+      { label: `Total ${term("qopp")}`, value: qOpps, role: "ISR", color: "#2f74c0" },
+      { label: `Total ${term("sao")}`,  value: saos,  role: "ISR", color: "#1d5a96" },
     ] : []),
-    { label: `${term("deal")} Won`,   value: deals, role: "AE",  color: "#7c4a1e" }, // dark brown
+    { label: `${term("deal")} Won`,    value: deals, role: "AE · CLOSE", color: "#0a2d5a" },
   ];
 
-  // Dollar stages flare outward — progressively darker greens.
-  const dollarStages = [
-    { label: `${term("revenue","singular")} (program)`, value: wonRev, roi: totalClientSpend > 0 ? wonRev / totalClientSpend : null, color: "#22c55e" }, // bright green
-    { label: "Lifetime Revenue — Y1",                    value: ltY1,   roi: totalClientSpend > 0 ? ltY1   / totalClientSpend : null, color: "#16a34a" },
-    { label: "Lifetime Revenue — Y2",                    value: ltY2,   roi: totalClientSpend > 0 ? ltY2   / totalClientSpend : null, color: "#15803d" },
-    { label: "Lifetime Revenue — Y3",                    value: ltY3,   roi: totalClientSpend > 0 ? ltY3   / totalClientSpend : null, color: "#166534" },
+  // Bar width = share of the top-of-funnel volume (real proportion, not a fake
+  // trapezoid taper). Stage % = conversion from the immediately prior stage.
+  const top = countStages[0]?.value || 0;
+  const widthOf = (v) => (top > 0 ? Math.max(8, (v / top) * 100) : 8); // floor 8% so a label always fits
+  const stagePct = (i) => {
+    if (i === 0) return null;
+    const prev = countStages[i - 1].value;
+    return prev > 0 ? countStages[i].value / prev : null;
+  };
+  const overallWin = top > 0 ? deals / top : null;
+
+  // —— Dollar outcomes (right column) ——————————————————————————————————————
+  const wonRoi = totalClientSpend > 0 ? wonRev / totalClientSpend : null;
+  const y3Roi  = totalClientSpend > 0 ? ltY3  / totalClientSpend : null;
+  const roiTxt = (r) => (r != null && isFinite(r) ? `${Math.round(r * 10) / 10}×` : "—");
+
+  // —— Lifetime line (pure SVG, enlarged) ——————————————————————————————————
+  // Four points: Won (program) → Y1 → Y2 → Y3. Print-safe (no canvas/lib).
+  const ltPoints = [
+    { label: `${term("revenue", "singular")}`, short: "Won",    value: wonRev, roi: wonRoi },
+    { label: "Year 1",                          short: "Year 1", value: ltY1,   roi: totalClientSpend > 0 ? ltY1 / totalClientSpend : null },
+    { label: "Year 2",                          short: "Year 2", value: ltY2,   roi: totalClientSpend > 0 ? ltY2 / totalClientSpend : null },
+    { label: "Year 3",                          short: "Year 3", value: ltY3,   roi: totalClientSpend > 0 ? ltY3 / totalClientSpend : null },
   ];
-
-  // Geometry: trapezoid bands stack without gaps to form an hourglass.
-  // Counts narrow from top (inset 0%) to "waist" (inset MAX%) across N count stages.
-  // Dollars flare from waist back out to bottom (inset 0%) across N dollar stages.
-  const MAX_INSET = 32;
-  const cN = countStages.length;
-  const dN = dollarStages.length;
-  const countInsetAt  = (k) => (k / cN) * MAX_INSET;
-  const dollarInsetAt = (k) => ((dN - k) / dN) * MAX_INSET;
-
-  // Pinned to literal hex so the brand palette sweep can't alter the funnel's identity colors.
-  const ROLE_COLOR = { SDR: "#0f766e", ISR: "#7c3aed", AE: "#1d4ed8" };
-  // Determine the first row index for each role so we only render its label once.
-  const firstRoleIdx = {};
-  countStages.forEach((s, i) => { if (!(s.role in firstRoleIdx)) firstRoleIdx[s.role] = i; });
-
-  const BAND_HEIGHT = 50;
-
-  const Band = ({ topInset, bottomInset, color, label, valueText, roiText, roleText, roleColor }) => {
-    // Inline SVG polygon for the trapezoid — renders reliably in html2canvas (CSS clip-path does not).
-    const points = `${topInset.toFixed(2)},0 ${(100 - topInset).toFixed(2)},0 ${(100 - bottomInset).toFixed(2)},100 ${bottomInset.toFixed(2)},100`;
-    return (
-      <div style={{ display: "grid", gridTemplateColumns: "70px 1fr 64px", alignItems: "stretch", height: BAND_HEIGHT }}>
-        {/* Left: role tag + stage label */}
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", paddingRight: 8 }}>
-          {roleText && (
-            <span style={{ fontSize: 9, fontFamily: "monospace", color: roleColor, fontWeight: 700, fontStyle: "italic", textAlign: "right" }}>{roleText}</span>
-          )}
-          <span style={{ fontSize: 10, color: C.textLight, fontWeight: 600, textAlign: "right", lineHeight: 1.2 }}>{label}</span>
-        </div>
-        {/* Middle: trapezoid (SVG polygon) + centered value overlay */}
-        <div style={{ position: "relative", height: BAND_HEIGHT }}>
-          <svg
-            width="100%"
-            height={BAND_HEIGHT}
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            style={{ display: "block" }}
-          >
-            <polygon points={points} fill={color} />
-          </svg>
-          <div style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            pointerEvents: "none",
-          }}>
-            <span style={{ color: "white", fontWeight: 800, fontSize: 17, fontFamily: "monospace", letterSpacing: "0.02em" }}>{valueText}</span>
-          </div>
-        </div>
-        {/* Right: ROI (dollar bands only) */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", paddingLeft: 8 }}>
-          {roiText && (
-            <span style={{ fontSize: 11, fontFamily: "monospace", color: C.textFaint, fontWeight: 600 }}>{roiText}</span>
-          )}
-        </div>
-      </div>
-    );
+  // Enlarged geometry. viewBox units; SVG scales responsively to its container.
+  const LT_W = 320, LT_H = 150, LT_PAD_L = 6, LT_PAD_R = 6, LT_TOP = 16, LT_BOT = 34;
+  const maxV = Math.max(...ltPoints.map((p) => p.value || 0), 1);
+  const xAt = (i) => LT_PAD_L + (i / (ltPoints.length - 1)) * (LT_W - LT_PAD_L - LT_PAD_R);
+  const yAt = (v) => LT_TOP + (1 - (v || 0) / maxV) * (LT_H - LT_TOP - LT_BOT);
+  const linePts = ltPoints.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.value).toFixed(1)}`).join(" ");
+  const areaPts = `${xAt(0).toFixed(1)},${(LT_H - LT_BOT).toFixed(1)} ${linePts} ${xAt(ltPoints.length - 1).toFixed(1)},${(LT_H - LT_BOT).toFixed(1)}`;
+  const compactUSD = (n) => {
+    if (n == null || !isFinite(n)) return "—";
+    const a = Math.abs(n);
+    if (a >= 1e6) return `$${(n / 1e6).toFixed(a >= 1e7 ? 0 : 2).replace(/\.?0+$/, "")}M`;
+    if (a >= 1e3) return `$${Math.round(n / 1e3)}K`;
+    return fmt(n);
   };
 
+  const GREEN = "#0c5e30", GREEN_MID = "#1f9d57", GREEN_FILL = "rgba(31,157,87,0.10)", NAVY = "#0a2d5a";
+
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
         <div style={{ width: 6, height: 20, background: "#15803d", borderRadius: 3 }} />
-        <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel visualization</span>
+        <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>From meetings booked to revenue won</span>
         <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>program totals</span>
       </div>
 
-      {/* Count bands — narrowing hourglass top */}
-      <div>
-        {countStages.map((stage, i) => (
-          <Band
-            key={`c-${i}`}
-            topInset={countInsetAt(i)}
-            bottomInset={countInsetAt(i + 1)}
-            color={stage.color}
-            label={stage.label}
-            valueText={fmtN(stage.value, 0)}
-            roleText={firstRoleIdx[stage.role] === i ? stage.role : ""}
-            roleColor={ROLE_COLOR[stage.role]}
-          />
-        ))}
-      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1px 1fr", gap: 20, alignItems: "stretch" }}>
+        {/* ——— LEFT: count funnel ——————————————————————————————————————— */}
+        <div>
+          <div style={{ marginBottom: 12 }}>
+            <span style={{ fontFamily: "monospace", fontSize: 10, color: C.blue, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>The funnel</span>
+            <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, marginLeft: 6 }}>counts · width = volume</span>
+            <div style={{ fontSize: 11, color: C.textLight, marginTop: 4 }}>How activity converts down the pipeline.</div>
+          </div>
 
-      {/* Dollar bands — flaring hourglass bottom (touches the count waist with no gap) */}
-      <div>
-        {dollarStages.map((stage, i) => (
-          <Band
-            key={`d-${i}`}
-            topInset={dollarInsetAt(i)}
-            bottomInset={dollarInsetAt(i + 1)}
-            color={stage.color}
-            label={stage.label}
-            valueText={fmt(stage.value)}
-            roiText={stage.roi != null && isFinite(stage.roi) ? `${(Math.round(stage.roi * 10) / 10)}× ROI` : "—"}
-          />
-        ))}
+          {countStages.map((s, i) => {
+            const sp = stagePct(i);
+            return (
+              <div key={i} style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{s.label}</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 9, color: C.textFaint, letterSpacing: "0.06em" }}>{s.role}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {/* Track + fill */}
+                  <div style={{ flex: 1, height: 30, background: C.blueLight, borderRadius: 5, position: "relative", overflow: "hidden" }}>
+                    <div style={{ position: "absolute", inset: 0, width: `${widthOf(s.value)}%`, background: s.color, borderRadius: 5, display: "flex", alignItems: "center", paddingLeft: 10, minWidth: 38 }}>
+                      <span style={{ color: "#fff", fontWeight: 800, fontSize: 14, fontFamily: "monospace" }}>{fmtN(s.value, 0)}</span>
+                    </div>
+                  </div>
+                  {/* Stage conversion % (skip on first row) */}
+                  <span style={{ width: 42, textAlign: "right", fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: sp == null ? "transparent" : C.textMid }}>
+                    {sp == null ? "—" : pct(sp).replace(".0", "")}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Overall win rate footer */}
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: C.textLight }}>Overall win rate</span>
+            <span style={{ fontFamily: "monospace", fontSize: 12, color: C.textMid }}>
+              <b style={{ color: C.blue, fontSize: 14 }}>{overallWin == null ? "—" : pct(overallWin).replace(".0", "")}</b>
+              <span style={{ color: C.textFaint }}>{"  "}· {fmtN(top, 0)} → {fmtN(deals, 0)}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{ background: C.border }} />
+
+        {/* ——— RIGHT: dollar outcomes ——————————————————————————————————— */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {/* Pipeline Created hero */}
+          <div style={{ background: NAVY, borderRadius: 10, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontFamily: "monospace", fontSize: 10, color: "#9bc4ef", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase" }}>{term("pipeline", "singular")} created</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginTop: 2, lineHeight: 1.3 }}>total opportunity value generated</div>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", letterSpacing: "-0.5px", whiteSpace: "nowrap" }}>{pipeline == null ? "—" : fmt(pipeline)}</div>
+          </div>
+
+          {/* Won revenue + lifetime graph */}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,0.85fr) minmax(0,1.15fr)", gap: 16, alignItems: "start", flex: 1 }}>
+            {/* Won revenue block */}
+            <div>
+              <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase" }}>Won revenue</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: GREEN, letterSpacing: "-1px", lineHeight: 1.05, marginTop: 2 }}>{compactUSD(wonRev)}</div>
+              <div style={{ display: "inline-block", marginTop: 8, background: C.greenLight, color: GREEN, fontFamily: "monospace", fontSize: 12, fontWeight: 700, borderRadius: 5, padding: "3px 9px" }}>{roiTxt(wonRoi)} ROI</div>
+              <div style={{ fontSize: 11, color: C.textLight, marginTop: 12, lineHeight: 1.5 }}>
+                Lifetime value grows to <b style={{ color: C.text }}>{compactUSD(ltY3)}</b> &amp; <b style={{ color: C.text }}>{roiTxt(y3Roi)} ROI</b> as contracts renew.
+              </div>
+            </div>
+
+            {/* Lifetime revenue line (enlarged, pure SVG) */}
+            <div>
+              <div style={{ fontFamily: "monospace", fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", lineHeight: 1.3 }}>Projected lifetime revenue</div>
+              <div style={{ fontSize: 10, color: C.textFaint, marginBottom: 6 }}>at current renewal rates</div>
+              <svg viewBox={`0 0 ${LT_W} ${LT_H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+                <polygon points={areaPts} fill={GREEN_FILL} />
+                <polyline points={linePts} fill="none" stroke={GREEN_MID} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                {ltPoints.map((p, i) => {
+                  const x = xAt(i), y = yAt(p.value);
+                  const last = i === ltPoints.length - 1;
+                  return (
+                    <g key={i}>
+                      <circle cx={x} cy={y} r={last ? 5 : 4} fill={last ? GREEN_MID : C.white} stroke={GREEN_MID} strokeWidth="2.5" />
+                      <text x={Math.min(Math.max(x, 18), LT_W - 18)} y={y - 9} textAnchor="middle" fontFamily="monospace" fontSize="10" fontWeight="700" fill={GREEN}>{compactUSD(p.value)}</text>
+                      <text x={x} y={LT_H - 17} textAnchor="middle" fontFamily="monospace" fontSize="9" fill={C.textLight}>{p.short}</text>
+                      <text x={x} y={LT_H - 5} textAnchor="middle" fontFamily="monospace" fontSize="9" fontWeight="700" fill={C.textFaint}>{roiTxt(p.roi)}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.textLight }}><span style={{ width: 11, height: 11, borderRadius: 3, background: NAVY }} />{term("pipeline", "singular")} created</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.textLight }}><span style={{ width: 11, height: 11, borderRadius: 3, background: GREEN }} />Realized revenue</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.textLight }}><span style={{ width: 11, height: 11, borderRadius: "50%", border: `2.5px solid ${GREEN_MID}`, background: C.white }} />Projected lifetime</span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1021,8 +1075,8 @@ export default function PricingModel() {
             );
           })()}
 
-          {/* FUNNEL OVERVIEW — visualization on the left, table card on the right */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+          {/* FUNNEL OVERVIEW — full-width visualization, projection table beneath */}
+          <div style={{ marginBottom: 16 }}>
             <FunnelViz
               counts={{
                 sals:  calc.totals.sals,
@@ -1032,16 +1086,18 @@ export default function PricingModel() {
                 deals: calc.totals.deals,
               }}
               dollars={{
-                wonRev: calc.totalWonDealValue,
-                ltY1:   calc.lifetimeY1,
-                ltY2:   calc.lifetimeY2,
-                ltY3:   calc.lifetimeY3,
+                wonRev:   calc.totalWonDealValue,
+                ltY1:     calc.lifetimeY1,
+                ltY2:     calc.lifetimeY2,
+                ltY3:     calc.lifetimeY3,
+                pipeline: calc.totals.pipeline,
               }}
               isrInProgram={isrFTE > 0}
               totalClientSpend={calc.totalClientSpend}
               term={term}
             />
-
+          </div>
+          <div style={{ marginBottom: 16 }}>
             <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <div style={{ width: 6, height: 20, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
@@ -1050,7 +1106,6 @@ export default function PricingModel() {
               </div>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
                 <ProjectionTable
-                  fill
                   rows={[
                     { label: `Total ${term("sal")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSals,       programLengthMonths, calc.steadyAvgSals),                                color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
                     { label: `Total ${term("sql")}`,                values: cumulativeAt(calc.monthly, (x) => x.totalSqls,       programLengthMonths, calc.steadyAvgSqls),                                color: C.blue,    format: (v) => fmtN(v, 0), enabled: true },
@@ -1322,6 +1377,10 @@ export default function PricingModel() {
           body * { visibility: hidden; }
           .proposal-print, .proposal-print * { visibility: visible; }
           .proposal-print { position: absolute; left: 0; top: 0; width: 100%; display: block; }
+          /* Keep the redesigned funnel from dominating page 1; never split it or its table. */
+          .proposal-print .funnel-print-wrap { max-height: 2.7in; overflow: hidden; }
+          .proposal-print .funnel-print-wrap,
+          .proposal-print .funnel-table-print { break-inside: avoid; -webkit-column-break-inside: avoid; }
           @page { size: Letter landscape; margin: 0.4in; }
         }
       `}</style>
@@ -1363,17 +1422,17 @@ export default function PricingModel() {
             </div>
 
             {/* Lifetime revenue row */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 8 }}>
               <KPI label="Lifetime Revenue — Y1" value={revReady ? fmt(calc.lifetimeY1) : "—"} color={C.green} bg={C.blueLight} border={C.blueBorder} rightLabel="ROI" rightValue={roiY1} />
               <KPI label="Lifetime Revenue — Y2" value={revReady ? fmt(calc.lifetimeY2) : "—"} color={C.green} bg={C.blueLight} border={C.blueBorder} rightLabel="ROI" rightValue={roiY2} />
               <KPI label="Lifetime Revenue — Y3" value={revReady ? fmt(calc.lifetimeY3) : "—"} color={C.green} bg={C.blueLight} border={C.blueBorder} rightLabel="ROI" rightValue={roiY3} />
             </div>
 
             {/* Row 1: Funnel visualization */}
-            <div style={{ marginBottom: 12 }}>
+            <div className="funnel-print-wrap" style={{ marginBottom: 8 }}>
               <FunnelViz
                 counts={{ sals: calc.totals.sals, sqls: calc.totals.sqls, qOpps: calc.totals.qOpps, saos: calc.totals.saos, deals: calc.totals.deals }}
-                dollars={{ wonRev: calc.totalWonDealValue, ltY1: calc.lifetimeY1, ltY2: calc.lifetimeY2, ltY3: calc.lifetimeY3 }}
+                dollars={{ wonRev: calc.totalWonDealValue, ltY1: calc.lifetimeY1, ltY2: calc.lifetimeY2, ltY3: calc.lifetimeY3, pipeline: calc.totals.pipeline }}
                 isrInProgram={isrFTE > 0}
                 totalClientSpend={calc.totalClientSpend}
                 term={term}
@@ -1381,7 +1440,7 @@ export default function PricingModel() {
             </div>
 
             {/* Row 2: Funnel breakdown table */}
-            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+            <div className="funnel-table-print" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <div style={{ width: 6, height: 18, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
                 <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
