@@ -1369,11 +1369,16 @@ export default function PricingModel() {
         @media screen { .proposal-print { display: none; } }
         @media print {
           body * { visibility: hidden; }
-          .proposal-print, .proposal-print * { visibility: visible; }
+          /* print-color-adjust: exact forces backgrounds/fills (KPI boxes, navy hero,
+             funnel bars, row shading) to actually render — browsers drop them otherwise. */
+          .proposal-print, .proposal-print * { visibility: visible; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
           .proposal-print { position: absolute; left: 0; top: 0; width: 100%; display: block; }
           /* Cap funnel height so the funnel + Expected Outcomes both fit one page.
              2.9in is tuned for the tallest case: ISR on = 5 bars + Deal Economics strip. */
           .proposal-print .funnel-print-wrap { max-height: 2.9in; overflow: hidden; break-inside: avoid; -webkit-column-break-inside: avoid; }
+          /* Compress the Expected Outcomes rows so the table stays on page 1.
+             !important overrides the inline S.td/S.th padding. */
+          .proposal-print table th, .proposal-print table td { padding-top: 2px !important; padding-bottom: 2px !important; }
           @page { size: Letter landscape; margin: 0.4in; }
         }
       `}</style>
@@ -1389,8 +1394,8 @@ export default function PricingModel() {
         return (
           <div className="proposal-print" style={{ background: C.white, color: C.text, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
             {/* Masthead */}
-            <div style={{ background: C.navy, color: C.white, padding: "14px 18px", borderRadius: 8, marginBottom: 12 }}>
-              <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.3px" }}>MemoryBlue Pricing Proposal</div>
+            <div style={{ background: C.navy, color: C.white, padding: "10px 16px", borderRadius: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.3px" }}>MemoryBlue Pricing Proposal</div>
               <div style={{ fontFamily: "monospace", fontSize: 11, color: "rgba(255,255,255,0.78)", marginTop: 4 }}>{proposalSubtitle(inputs)}</div>
             </div>
 
