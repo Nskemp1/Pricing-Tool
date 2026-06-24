@@ -495,6 +495,7 @@ export default function PricingModel() {
   const [role, setRole] = useState("sdr"); // sdr | isr | ae
 
   // Calibrate to Client
+  const [clientName, setClientName] = useState("");
   const [vertical, setVertical] = useState(null);
   const [companySize, setCompanySize] = useState(null);
   const [yr1Renewal, setYr1Renewal] = useState(0.80);
@@ -838,6 +839,12 @@ export default function PricingModel() {
           <div style={{ fontSize: 10, fontFamily: "monospace", color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Configuration</div>
 
           <Collapsible title="Calibrate to Client" accent={C.blue} defaultOpen={true}>
+            <TextField
+              label="Client's Name"
+              value={clientName}
+              onChange={setClientName}
+              placeholder="— Client name —"
+            />
             <Select
               label="Vertical"
               value={vertical}
@@ -1455,7 +1462,9 @@ export default function PricingModel() {
             <div className="page-1" style={{ display: "flex", flexDirection: "column", minHeight: "7.6in" }}>
             {/* Masthead */}
             <div style={{ background: C.navy, color: C.white, padding: "10px 16px", borderRadius: 8, marginBottom: 8 }}>
-              <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.3px" }}>MemoryBlue Pricing Proposal</div>
+              <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.3px" }}>
+                {clientName.trim() ? `memoryBlue Proposal: Projects for ${clientName.trim()}` : "memoryBlue Proposal"}
+              </div>
               <div style={{ fontFamily: "monospace", fontSize: 11, color: "rgba(255,255,255,0.78)", marginTop: 4 }}>{proposalSubtitle(inputs)}</div>
             </div>
 
