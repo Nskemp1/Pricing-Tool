@@ -219,6 +219,10 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
   const widthOf = (v) => (top > 0 ? Math.max(8, (v / top) * 100) : 8); // floor 8% so a label always fits
   const stagePct = (i) => {
     if (i === 0) return null;
+    // The closing stage (Deals Won) converts at the true close/win rate. Deals are
+    // rounded to whole deals per month before summing, so deriving the % from the
+    // count ratio drifts off the real rate (e.g. 19.4% vs 20%) — use the rate directly.
+    if (i === countStages.length - 1 && econ.closeRate != null) return econ.closeRate;
     const prev = countStages[i - 1].value;
     return prev > 0 ? countStages[i].value / prev : null;
   };
@@ -1463,7 +1467,7 @@ export default function PricingModel() {
             {/* Masthead */}
             <div style={{ background: C.navy, color: C.white, padding: "10px 16px", borderRadius: 8, marginBottom: 8 }}>
               <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.3px" }}>
-                {clientName.trim() ? `memoryBlue Proposal: Projects for ${clientName.trim()}` : "memoryBlue Proposal"}
+                {clientName.trim() ? `memoryBlue Proposal: Projections for ${clientName.trim()}` : "memoryBlue Proposal"}
               </div>
               <div style={{ fontFamily: "monospace", fontSize: 11, color: "rgba(255,255,255,0.78)", marginTop: 4 }}>{proposalSubtitle(inputs)}</div>
             </div>
