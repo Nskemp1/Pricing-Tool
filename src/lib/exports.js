@@ -2,6 +2,8 @@
 // Excel: SheetJS (xlsx). PDF: jsPDF + html2canvas. All loaded via dynamic import
 // so the ~900KB of libs only ship to users who actually click Export.
 
+import { INTERNAL_FULLY_LOADED } from "./calibration";
+
 function todayStamp() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -70,6 +72,30 @@ function sheetSummary(calc, inputs) {
     ["Total SALs", calc.totals.sals],
     ["Total SQLs", calc.totals.sqls],
   ];
+
+  // Internal Hire vs memoryBlue — staffed roles only, computed the same way as
+  // the screen tab / PDF page (compareRoles) so all three surfaces agree.
+  const compareRoles = [
+    inputs.sdrFTE > 0 && { role: "SDR", fte: inputs.sdrFTE, mb: calc.endSDR, intl: INTERNAL_FULLY_LOADED.sdr },
+    inputs.isrFTE > 0 && { role: "ISR", fte: inputs.isrFTE, mb: calc.endISR, intl: INTERNAL_FULLY_LOADED.isr },
+    inputs.aeFTE  > 0 && { role: "AE",  fte: inputs.aeFTE,  mb: calc.endAE,  intl: INTERNAL_FULLY_LOADED.ae },
+  ].filter(Boolean);
+  if (compareRoles.length > 0) {
+    const intTeamTotal = compareRoles.reduce((a, r) => a + r.intl * r.fte, 0);
+    const mbTeamTotal = calc.monthlyClientBill;     // all-in mB cost
+    const monthlySaving = intTeamTotal - mbTeamTotal;
+    rows.push([]);
+    rows.push(["Internal vs memoryBlue"]);
+    rows.push(["Role", "FTE", "Internal /FTE/mo", "mB /FTE/mo", "Team Internal /mo", "Team mB /mo"]);
+    for (const r of compareRoles) {
+      rows.push([r.role, r.fte, r.intl, r.mb, r.intl * r.fte, r.mb * r.fte]);
+    }
+    rows.push(["Internal Total Cost /mo", intTeamTotal]);
+    rows.push(["memoryBlue Total Cost /mo (all-in)", mbTeamTotal]);
+    rows.push(["Monthly Saving (+ = cheaper with mB)", monthlySaving]);
+    rows.push(["Annual Saving", monthlySaving * 12]);
+  }
+
   return rows;
 }
 
