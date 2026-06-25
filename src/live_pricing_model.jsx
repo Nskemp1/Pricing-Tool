@@ -270,7 +270,7 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
   const funnelBars = [];
   countStages.forEach((s, ci) => {
     if (ci === dealsIdx) {
-      funnelBars.push({ kind: "dollar", label: `${term("pipeline", "singular")} created`, role: "OPPORTUNITY", color: NAVY, value: pipeline });
+      funnelBars.push({ kind: "dollar", label: `${term("pipeline", "singular")} created`, role: "OPPORTUNITY", color: GREEN, value: pipeline });
     }
     funnelBars.push({ kind: "count", label: s.label, role: s.role, color: s.color, value: s.value, pct: stagePct(ci) });
     if (ci === dealsIdx) {
