@@ -77,17 +77,6 @@ export const VERTICAL_TIER_RAMP = {
 
 export const DEFAULT_RAMP = [1, 3, 5, 10, 10, 10];
 
-// Fully-loaded internal monthly cost to employ one rep in-house, by role.
-// = base salary/12 + commission + benefits/payroll tax + tech stack + data
-//   platforms + manager allocation + RevOps allocation + recruiting amortization
-//   + training/ramp. PLACEHOLDER values — replace with sourced benchmarks
-//   (US / DC-metro market) before client use.
-export const INTERNAL_FULLY_LOADED = {
-  sdr: 13500,
-  isr: 12330,
-  ae:  18700,
-};
-
 // Returns a length-`programLengthMonths` ramp array, or null when there is
 // no calibration data at all for the chosen vertical (caller decides what
 // to do, e.g. fall back to DEFAULT_RAMP for Real Estate Tech).

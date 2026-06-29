@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { buildFilename, proposalSubtitle } from "./lib/exports";
-import { getCalibratedRamp, defaultRampForLength, INTERNAL_FULLY_LOADED } from "./lib/calibration";
+import { getCalibratedRamp, defaultRampForLength } from "./lib/calibration";
 
 const fmt = (n) => n == null || isNaN(n) || !isFinite(n) ? "—" : "$" + Math.round(n).toLocaleString("en-US");
 const fmtN = (n, dp = 0) => n == null || isNaN(n) ? "—" : Number(n).toFixed(dp);
@@ -27,7 +27,6 @@ const C = {
   purple: "#6b46c1", purpleLight: "#efeafb", purpleBorder: "#d7c9f2",
   // teal aliases point at brand blue so existing SDR (teal) accents read as blue automatically.
   teal: "#0d70c0", tealLight: "#e8f1fb", tealBorder: "#c5ddf5",
-  red: "#dc2626", redLight: "#fef2f2", redBorder: "#fecaca",
   slate: "#475569", border: "#dbe3ec", bg: "#f8fafc", white: "#ffffff",
   text: "#0f172a", textMid: "#334155", textLight: "#64748b", textFaint: "#94a3b8",
 };
@@ -261,9 +260,9 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
 
   // —— Left-funnel bar list ————————————————————————————————————————————————
   // The two dollar outcomes are shown as bars around the closing stage: Pipeline
-  // Created above Deals Won, Won Revenue below. Dollars share their own width
-  // scale (relative to the larger figure, pipeline) so they read as a continued
-  // taper instead of being forced onto the count scale.
+  // Created above Deals Won, Won Revenue below. Both use the green money color.
+  // Dollars share their own width scale (relative to the larger figure, pipeline)
+  // so they read as a continued taper instead of being forced onto the count scale.
   const dollarMax = Math.max(pipeline || 0, wonRev || 0, 1);
   const dollarWidthOf = (v) => Math.max(8, ((v || 0) / dollarMax) * 100);
   const dealsIdx = countStages.length - 1;
@@ -447,81 +446,6 @@ function ProjectionTable({ rows, S, fill = false }) {
         ))}
       </tbody>
     </table>
-  );
-}
-
-// —— Internal Hire vs memoryBlue ————————————————————————————————————————————
-// Shared by the screen "Internal vs mB" tab and the PDF page so the two never
-// drift. Renders a green saving hero, four KPI cards, and a per-role internal-vs-mB
-// bar comparison. `print` only tightens spacing for the PDF layout.
-function CompareSection({ compareRoles, intTeamTotal, mbTeamTotal, monthlySaving, annualSaving, print = false }) {
-  const cheaper = monthlySaving >= 0;
-  const savingColor = cheaper ? C.green : C.red;
-  const savingBg = cheaper ? C.greenLight : C.redLight;
-  const savingBorder = cheaper ? C.greenBorder : C.redBorder;
-
-  const renderBar = (value, color, label, max) => (
-    <div style={{ marginBottom: 5 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: 10, color: C.textLight, marginBottom: 2 }}>
-        <span>{label}</span>
-        <span style={{ color, fontWeight: 700 }}>{fmt(value)}/mo</span>
-      </div>
-      <div style={{ height: 14, background: C.bg, borderRadius: 4, overflow: "hidden" }}>
-        <div style={{ width: `${max > 0 ? (value / max) * 100 : 0}%`, height: "100%", background: color, borderRadius: 4 }} />
-      </div>
-    </div>
-  );
-
-  return (
-    <div>
-      {/* Hero strip */}
-      <div style={{ background: `linear-gradient(135deg,#14532d,${C.green})`, borderRadius: 10, padding: print ? "12px 16px" : "16px 20px", color: C.white, marginBottom: print ? 8 : 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <div style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(255,255,255,0.82)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase" }}>Monthly Team Saving</div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.78)", marginTop: 2 }}>{cheaper ? "cheaper with memoryBlue" : "cheaper in-house"}</div>
-        </div>
-        <div style={{ fontSize: print ? 26 : 32, fontWeight: 800, letterSpacing: "-0.5px", whiteSpace: "nowrap" }}>{fmt(Math.abs(monthlySaving))}</div>
-      </div>
-
-      {/* Four KPI cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: print ? 8 : 12 }}>
-        <KPI label="Internal Total Cost / mo" value={fmt(intTeamTotal)} color={C.red} bg={C.redLight} border={C.redBorder} />
-        <KPI label="mB Total Cost / mo" value={fmt(mbTeamTotal)} color={C.navy} bg={C.blueSoft} border={C.blueBorder} />
-        <KPI label="Monthly Saving" value={fmt(Math.abs(monthlySaving))} color={savingColor} bg={savingBg} border={savingBorder} />
-        <KPI label="Annual Saving" value={fmt(Math.abs(annualSaving))} color={savingColor} bg={savingBg} border={savingBorder} />
-      </div>
-
-      {/* Per-role comparison */}
-      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px" }}>
-        {compareRoles.map((r, idx) => {
-          const perFteSaving = r.intl - r.mb;
-          const max = Math.max(r.intl, r.mb, 1);
-          const last = idx === compareRoles.length - 1;
-          return (
-            <div key={r.role} style={{ marginBottom: last ? 8 : 14, paddingBottom: last ? 0 : 12, borderBottom: last ? "none" : `1px solid ${C.border}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: C.text }}>
-                  {r.role}{" "}
-                  <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, fontWeight: 400 }}>· {r.fte} FTE deployed</span>
-                </span>
-                <span style={{ fontFamily: "monospace", fontSize: 11, color: perFteSaving >= 0 ? C.green : C.red, fontWeight: 700 }}>
-                  {perFteSaving >= 0 ? "Save " : "Costs +"}{fmt(Math.abs(perFteSaving))}/FTE/mo
-                </span>
-              </div>
-              {renderBar(r.intl, C.red, "Internal (fully loaded)", max)}
-              {renderBar(r.mb, r.color, "memoryBlue fee", max)}
-              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: 10, color: C.textFaint, marginTop: 4 }}>
-                <span>Team internal: <b style={{ color: C.red }}>{fmt(r.intl * r.fte)}</b>/mo</span>
-                <span>Team mB: <b style={{ color: r.color }}>{fmt(r.mb * r.fte)}</b>/mo</span>
-              </div>
-            </div>
-          );
-        })}
-        <div style={{ fontFamily: "monospace", fontSize: 9, color: C.textFaint, lineHeight: 1.5, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
-          Internal figures are fully-loaded benchmark estimates (salary, commission, benefits, tooling, data, management, recruiting &amp; ramp). memoryBlue total reflects all-in monthly service fee including management and data.
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -801,24 +725,6 @@ export default function PricingModel() {
     setupFee, varPct, monthlyManagement, monthlyData,
     salToSqlRate, sqlToQOppRate, qOppToSaoRate, saoWinRate, closeRate, avgContractValue, avgSalesCycleMonths, ramp, programLengthMonths,
     yr1Renewal, yr2Renewal, yr3Renewal]);
-
-  // —— INTERNAL HIRE vs memoryBlue ————————————————————————————————————————————
-  // One array consumed by both the screen "Internal vs mB" tab and the PDF page,
-  // so the two surfaces never drift. Only staffed roles appear (.filter(Boolean),
-  // the same gating idiom used for the ISR funnel rows). Per-FTE bars compare one
-  // head's loaded internal cost vs one head's mB fee (endX); the headline mB total
-  // uses calc.monthlyClientBill (all-in) since the internal figures already bake in
-  // management / tooling / data overhead.
-  const compareRoles = [
-    sdrFTE > 0 && { role: "SDR", fte: sdrFTE, mb: calc.endSDR, intl: INTERNAL_FULLY_LOADED.sdr, color: C.teal },
-    isrFTE > 0 && { role: "ISR", fte: isrFTE, mb: calc.endISR, intl: INTERNAL_FULLY_LOADED.isr, color: C.navyMid },
-    aeFTE  > 0 && { role: "AE",  fte: aeFTE,  mb: calc.endAE,  intl: INTERNAL_FULLY_LOADED.ae,  color: C.navy },
-  ].filter(Boolean);
-
-  const intTeamTotal = compareRoles.reduce((a, r) => a + r.intl * r.fte, 0);
-  const mbTeamTotal  = calc.monthlyClientBill;       // all-in mB cost
-  const monthlySaving = intTeamTotal - mbTeamTotal;  // + = cheaper with mB
-  const annualSaving  = monthlySaving * 12;
 
   // —— GOAL-SEEK / PROGRAM BUILDER ———————————————————————————————————————————
   // Inverts the (linear-in-SDR) forward funnel: given a Pipeline OR Revenue target plus a target
@@ -1446,7 +1352,7 @@ export default function PricingModel() {
 
           {/* Tabs */}
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, display: "inline-flex", gap: 3, marginBottom: 12 }}>
-            {[["summary","Program Totals"],["monthly","Monthly Cashflow"],["compare","Internal vs mB"]].map(([k,v]) => (
+            {[["summary","Program Totals"],["monthly","Monthly Cashflow"]].map(([k,v]) => (
               <button key={k} style={S.tabBtn(tab === k)} onClick={() => setTab(k)}>{v}</button>
             ))}
           </div>
@@ -1526,22 +1432,6 @@ export default function PricingModel() {
             </div>
           )}
 
-          {/* —— INTERNAL vs memoryBlue TAB ————————————————————————————— */}
-          {tab === "compare" && (
-            compareRoles.length === 0 ? (
-              <div style={{ background: C.white, border: `1px dashed ${C.border}`, borderRadius: 10, padding: "40px 16px", textAlign: "center", color: C.textLight, fontSize: 12 }}>
-                Staff at least one role (SDR, ISR, or AE) to see the internal-hire cost comparison.
-              </div>
-            ) : (
-              <CompareSection
-                compareRoles={compareRoles}
-                intTeamTotal={intTeamTotal}
-                mbTeamTotal={mbTeamTotal}
-                monthlySaving={monthlySaving}
-                annualSaving={annualSaving}
-              />
-            )
-          )}
 
         </div>
       </div>
@@ -1567,8 +1457,6 @@ export default function PricingModel() {
           /* Expected Outcomes: shrink font + side padding so every month column fits
              the page width with no right-edge cut-off. */
           .proposal-print .eo-print table th, .proposal-print .eo-print table td { font-size: 8.5px !important; padding-left: 3px !important; padding-right: 3px !important; }
-          /* Internal-vs-mB page: keep it from splitting across pages. */
-          .proposal-print .ivm-print { break-inside: avoid; -webkit-column-break-inside: avoid; }
           /* margin: 0 suppresses the browser's own header/footer (date, title, URL,
              page number); the 0.3in page inset is applied as padding on .proposal-print. */
           @page { size: Letter landscape; margin: 0; }
@@ -1715,24 +1603,6 @@ export default function PricingModel() {
                 </tbody>
               </table>
             </div>
-
-            {/* PAGE 3 — Internal Hire vs memoryBlue (only renders when a role is staffed) */}
-            {compareRoles.length > 0 && (
-              <div className="ivm-print pb-before" style={{ background: C.white }}>
-                <div style={{ padding: "8px 14px", borderRadius: 8, marginBottom: 10, background: C.navy, color: C.white, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{ fontSize: 15, fontWeight: 800 }}>Internal Hire vs memoryBlue</span>
-                  <span style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(255,255,255,0.78)" }}>fully-loaded monthly cost comparison</span>
-                </div>
-                <CompareSection
-                  compareRoles={compareRoles}
-                  intTeamTotal={intTeamTotal}
-                  mbTeamTotal={mbTeamTotal}
-                  monthlySaving={monthlySaving}
-                  annualSaving={annualSaving}
-                  print
-                />
-              </div>
-            )}
           </div>
         );
       })()}
