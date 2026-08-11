@@ -311,11 +311,28 @@ function paginatePhases(phases, months) {
 // All colors pinned to literal hex so the brand-palette sweep in `C` can't alter
 // the funnel's identity colors. Uses the `fmt`, `fmtN`, `pct`, `C`, and `term`
 // already in scope in this file.
+//
+// `dense` tightens the left column's vertical rhythm — nothing else — for the PDF.
+// The card's height is driven entirely by the count bars, and with an ISR in the
+// program there are 7 of them, which pushed page 1 past the printed sheet. Because
+// the card carries break-inside: avoid, that didn't just spill: the whole graphic
+// jumped to a sheet of its own and left page 1 nearly empty. Tightening the rhythm
+// keeps the whole proposal at two pages without shrinking any type.
 // ============================================================================
-function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics, term }) {
+function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics, term, dense = false }) {
   const { sals, sqls, qOpps, saos, deals } = counts;
   const { wonRev, ltY1, ltY2, ltY3, pipeline } = dollars;
   const econ = economics || {};
+
+  // Vertical rhythm. Type sizes are identical in both modes — only spacing moves.
+  const BAR_H      = dense ? 24 : 30;
+  const BAR_GAP    = dense ? 8 : 14;
+  const BAR_LBL_MB = dense ? 3 : 4;
+  const CARD_PAD   = dense ? "12px 18px" : "16px 18px";
+  const TITLE_MB   = dense ? 10 : 16;
+  const INTRO_MB   = dense ? 8 : 12;
+  const FOOT_MT    = dense ? 10 : 16;
+  const FOOT_PT    = dense ? 8 : 12;
 
   // —— Count stages (left funnel) ——————————————————————————————————————————
   // ISR stages (Q-Opps, SAOs) are inserted only when ISR is in the program.
@@ -395,8 +412,8 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
   });
 
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: CARD_PAD, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: TITLE_MB }}>
         <div style={{ width: 6, height: 20, background: "#15803d", borderRadius: 3 }} />
         <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>From meetings booked to revenue won</span>
         <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>program totals</span>
@@ -405,7 +422,7 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1px 1fr", gap: 20, alignItems: "stretch" }}>
         {/* ——— LEFT: count funnel ——————————————————————————————————————— */}
         <div>
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: INTRO_MB }}>
             <span style={{ fontFamily: "monospace", fontSize: 10, color: C.blue, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>The funnel</span>
             <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint, marginLeft: 6 }}>counts & value · width = volume</span>
             <div style={{ fontSize: 11, color: C.textLight, marginTop: 4 }}>How activity converts down the pipeline.</div>
@@ -417,14 +434,14 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
             const barLabel = isDollar ? (s.value == null ? "—" : compactUSD(s.value)) : fmtN(s.value, 0);
             const sp = isDollar ? null : s.pct;
             return (
-              <div key={i} style={{ marginBottom: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+              <div key={i} style={{ marginBottom: BAR_GAP }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: BAR_LBL_MB }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{s.label}</span>
                   <span style={{ fontFamily: "monospace", fontSize: 9, color: C.textFaint, letterSpacing: "0.06em" }}>{s.role}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   {/* Track + fill */}
-                  <div style={{ flex: 1, height: 30, background: C.blueLight, borderRadius: 5, position: "relative", overflow: "hidden" }}>
+                  <div style={{ flex: 1, height: BAR_H, background: C.blueLight, borderRadius: 5, position: "relative", overflow: "hidden" }}>
                     <div style={{ position: "absolute", inset: 0, width: `${w}%`, background: s.color, borderRadius: 5, display: "flex", alignItems: "center", paddingLeft: 10, minWidth: 38 }}>
                       <span style={{ color: "#fff", fontWeight: 800, fontSize: 14, fontFamily: "monospace" }}>{barLabel}</span>
                     </div>
@@ -439,7 +456,7 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
           })}
 
           {/* Overall win rate footer */}
-          <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ marginTop: FOOT_MT, paddingTop: FOOT_PT, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 11, color: C.textLight }}>Overall win rate</span>
             <span style={{ fontFamily: "monospace", fontSize: 12, color: C.textMid }}>
               <b style={{ color: C.blue, fontSize: 14 }}>{overallWin == null ? "—" : pct(overallWin).replace(".0", "")}</b>
@@ -1751,7 +1768,10 @@ export default function PricingModel() {
               <KPI label="Lifetime Revenue — Y3" value={revReady ? fmt(calc.lifetimeY3) : "—"} color={C.green} bg={C.blueLight} border={C.blueBorder} rightLabel="ROI" rightValue={roiY3} />
             </div>
 
-            {/* Funnel visualization */}
+            {/* Funnel visualization. dense={isrFTE > 0}: ISR adds two count bars and the
+                Deal Economics strip, which is exactly when page 1 stops fitting its
+                sheet. Tighten the rhythm only then, so the SDR-only proposal prints
+                unchanged. */}
             <div className="funnel-print-wrap" style={{ marginBottom: 16 }}>
               <FunnelViz
                 counts={{ sals: calc.totals.sals, sqls: calc.totals.sqls, qOpps: calc.totals.qOpps, saos: calc.totals.saos, deals: calc.totals.deals }}
@@ -1760,6 +1780,7 @@ export default function PricingModel() {
                 isrInProgram={isrFTE > 0}
                 totalClientSpend={calc.totalClientSpend}
                 term={term}
+                dense={isrFTE > 0}
               />
             </div>
 
