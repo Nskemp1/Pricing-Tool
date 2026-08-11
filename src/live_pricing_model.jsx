@@ -238,6 +238,11 @@ function collapseDead(months) {
   return out;
 }
 
+// Usable height of one printed sheet: Letter landscape (8.5in) less the 0.3in
+// inset .proposal-print applies on each edge, with a little slack so rounding
+// can't tip the page into a spurious overflow sheet.
+const PAGE_FILL_HEIGHT = "7.7in";
+
 // Row budget per printed page. Page 2 shares its height with the Funnel table
 // above it; later pages get the full sheet. Units are table rows — a phase band
 // costs one. Calibrated against measured print geometry: ~18px per row in a
@@ -519,12 +524,15 @@ function FunnelViz({ counts, dollars, isrInProgram, totalClientSpend, economics,
   );
 }
 
-function ProjectionTable({ rows, S, fill = false }) {
+// `stretch` grows the table to fill a flex-column parent WITHOUT changing type
+// size (unlike `fill`, which also scales the fonts up). The PDF's page 2 uses it
+// so rows absorb the leftover sheet height instead of leaving a gap at the bottom.
+function ProjectionTable({ rows, S, fill = false, stretch = false }) {
   const rowPad      = fill ? "14px 10px" : "7px 8px";
   const labelFont   = fill ? 13 : undefined;
   const valueFont   = fill ? 17 : undefined;
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4, ...(fill ? { height: "100%" } : {}) }}>
+    <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4, ...(fill ? { height: "100%" } : {}), ...(stretch ? { flex: 1 } : {}) }}>
       <thead>
         <tr>
           <th style={{ ...S.thl, padding: "6px 8px" }}>Metric</th>
@@ -536,9 +544,13 @@ function ProjectionTable({ rows, S, fill = false }) {
       <tbody>
         {rows.map((row) => (
           <tr key={row.label}>
-            <td style={{ ...S.tdl, padding: rowPad, display: "flex", alignItems: "center", gap: 8, fontSize: labelFont }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, flexShrink: 0 }} />
-              <span style={{ fontWeight: 600, color: C.textMid }}>{row.label}</span>
+            {/* Kept as a normal table-cell (dot inline rather than a flex child) so the
+                label shares the row's vertical-align: middle with the value cells. As a
+                flex container it centered on its own content box instead, which read as
+                a visible baseline offset once rows grew taller to fill the page. */}
+            <td style={{ ...S.tdl, padding: rowPad, fontSize: labelFont, whiteSpace: "nowrap" }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: row.color, marginRight: 8, verticalAlign: "middle" }} />
+              <span style={{ fontWeight: 600, color: C.textMid, verticalAlign: "middle" }}>{row.label}</span>
             </td>
             {row.values.map((v, i) => (
               <td key={i} style={{ ...S.td, padding: rowPad, fontWeight: 700, color: row.enabled ? row.color : C.textFaint, fontSize: valueFont }}>
@@ -592,10 +604,10 @@ function monthSpan(first, last) {
   return from === to ? `M${from}` : `M${from}–M${to}`;
 }
 
-function MonthlyProjectionTable({ groups, cols, S }) {
+function MonthlyProjectionTable({ groups, cols, S, stretch = false }) {
   const span = cols.length + 1;
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+    <table style={{ width: "100%", borderCollapse: "collapse", ...(stretch ? { flex: 1 } : {}) }}>
       <thead>
         <tr>
           <th style={{ ...S.thl, width: 52 }}>Month</th>
@@ -1650,8 +1662,12 @@ export default function PricingModel() {
              left to page-1 overflow so it can't drift as FunnelViz grows with ISR on. */
           .proposal-print .pb-before { break-before: page; page-break-before: always; }
           .proposal-print .funnel-table-print { break-inside: avoid; -webkit-column-break-inside: avoid; }
-          /* Compress table rows vertically. !important overrides inline S.td/S.th padding. */
-          .proposal-print table th, .proposal-print table td { padding-top: 2px !important; padding-bottom: 2px !important; }
+          /* Page 2's tables stretch to fill the sheet, so rows take their height from
+             that fill rather than from padding — a hard 2px compression here would just
+             push the slack to the bottom of the page as dead space. Keep the padding
+             small as a floor and center the text within whatever height a row ends up
+             with. */
+          .proposal-print table th, .proposal-print table td { padding-top: 3px !important; padding-bottom: 3px !important; vertical-align: middle; }
           /* Monthly projection is transposed (months as rows), so the metric count is
              fixed and the font never needs shrinking. Keep month rows whole, and repeat
              the header if a chunk still spills past its page. */
@@ -1731,17 +1747,20 @@ export default function PricingModel() {
             </div>{/* end PAGE 1 */}
 
             {/* PAGE 2+ — Funnel milestone table, then the transposed monthly projection.
-                Both share one centered ~7.5in measure so they read as a pair rather than
-                stretching across the full landscape width. */}
-            <div className="page-2 pb-before" style={{ maxWidth: "7.5in", margin: "0 auto" }}>
+                Full width, matching page 1's measure. The wrapper is a flex column set to
+                the sheet's usable height and the cards grow in proportion to their row
+                counts, so leftover space is absorbed evenly as row height instead of
+                pooling as a gap at the bottom. Content taller than the sheet simply
+                overrides the minimum and paginates as usual. */}
+            <div className="page-2 pb-before" style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: PAGE_FILL_HEIGHT }}>
               {/* Funnel breakdown table */}
-              <div className="funnel-table-print" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+              <div className="funnel-table-print" style={{ flex: `${funnelRows.length} 1 auto`, display: "flex", flexDirection: "column", background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                   <div style={{ width: 6, height: 18, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
                   <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
                   <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
                 </div>
-                <ProjectionTable rows={funnelRows} S={S} />
+                <ProjectionTable rows={funnelRows} S={S} stretch />
               </div>
 
               {/* Monthly projection — one card per page chunk; chunks break on phase seams */}
@@ -1749,13 +1768,13 @@ export default function PricingModel() {
                 <div
                   key={groups[0].key}
                   className={i > 0 ? "mp-print pb-before" : "mp-print"}
-                  style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}
+                  style={{ flex: `${groups.reduce((a, g) => a + g.rows.length + 1, 0)} 1 auto`, display: "flex", flexDirection: "column", background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}
                 >
                   <div style={{ padding: "8px 14px", borderBottom: `1px solid ${C.border}`, fontFamily: "monospace", fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.08em", background: C.bg, display: "flex", justifyContent: "space-between" }}>
                     <span>Expected Outcomes — Monthly Projection{i > 0 ? " (continued)" : ""}</span>
                     <span style={{ color: C.textFaint }}>{sdrFTE} SDR{isrFTE > 0 ? ` · ${isrFTE} ISR` : ""} · {programLengthMonths}mo program{calc.hasCycle ? ` + ${avgSalesCycleMonths}mo cycle` : ""}</span>
                   </div>
-                  <MonthlyProjectionTable groups={groups} cols={mpCols} S={S} />
+                  <MonthlyProjectionTable groups={groups} cols={mpCols} S={S} stretch />
                 </div>
               ))}
             </div>
