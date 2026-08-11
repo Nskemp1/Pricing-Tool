@@ -242,14 +242,23 @@ function collapseDead(months) {
 // inset .proposal-print applies on each edge, with a little slack so rounding
 // can't tip the page into a spurious overflow sheet.
 const PAGE_FILL_HEIGHT = "7.7in";
+// Breathing room above page 2's first card so it doesn't sit flush against the
+// top edge. Comes out of PAGE_FILL_HEIGHT (border-box), so it costs no extra sheet.
+const PAGE_TOP_INSET = "0.25in";
+// Below this many rows a sheet is left at its natural height instead of stretching
+// to fill. A sparse continuation sheet (say 6 tail months) stretched to a full page
+// gives ~180px rows and a phase band the size of a headline — worse than simply
+// ending the page early.
+const MP_FILL_MIN_ROWS = 12;
 
-// Row budget per printed page. Page 2 shares its height with the Funnel table
-// above it; later pages get the full sheet. Units are table rows — a phase band
-// costs one. Calibrated against measured print geometry: ~18px per row in a
-// 758px usable sheet (Letter landscape less the 0.3in inset), less ~171px of
-// funnel table and ~56px of caption + header, with headroom left for headers that
-// wrap onto a second line when ISR terms are long.
-const MP_ROW_BUDGET = [26, 36];
+// Row budget per printed sheet. The first shares its height with the Funnel table
+// above it; later sheets get the whole page. Units are table rows — a phase band
+// costs one. Calibrated against measured print geometry at the page-2 type scale:
+// ~21px per row in a 758px usable sheet (Letter landscape less the 0.3in inset),
+// less the top inset, ~241px of funnel table at its tallest (ISR on, 7 rows) and
+// ~61px of card caption + header. Deliberately conservative — overshooting spills
+// a whole extra sheet, while undershooting only means slightly airier rows.
+const MP_ROW_BUDGET = [20, 32];
 // Never strand fewer than this many month rows on a page when splitting a phase.
 const MP_MIN_SPLIT = 4;
 
@@ -618,13 +627,13 @@ function MonthlyProjectionTable({ groups, cols, S, stretch = false }) {
         {groups.map((g) => (
           <Fragment key={g.key + (g.cont ? "-cont" : "")}>
             <tr>
-              <td colSpan={span} style={{ background: g.bg, color: g.fg, fontFamily: "monospace", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", padding: "4px 10px", borderBottom: `1px solid ${C.border}` }}>
+              <td colSpan={span} style={{ background: g.bg, color: g.fg, fontFamily: "monospace", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", padding: "4px 10px", borderBottom: `1px solid ${C.border}` }}>
                 {g.name}{g.cont ? " (cont.)" : ""} · {monthSpan(g.rows[0], g.rows[g.rows.length - 1])}
               </td>
             </tr>
             {g.rows.map((r) => r.dead ? (
               <tr key={`dead-${r.from}`}>
-                <td colSpan={span} style={{ ...S.tdl, fontSize: 9, fontStyle: "italic", color: C.textFaint, background: C.bg }}>
+                <td colSpan={span} style={{ ...S.tdl, fontSize: 10.5, fontStyle: "italic", color: C.textFaint, background: C.bg }}>
                   {monthSpan(r, r)} · {r.inProgram ? "onboarding, no output yet" : "pipeline maturing"}
                 </td>
               </tr>
@@ -1697,6 +1706,16 @@ export default function PricingModel() {
           { label: `${term("deal")} Won`,                 values: cumulativeAt(calc.monthly, (x) => x.dealsWon,        programLengthMonths, calc.steadyAvgWon),      color: C.navy,    format: (v) => fmtN(v, 0), enabled: calc.hasClose },
           { label: `Total ${term("revenue","singular")}`, values: cumulativeAt(calc.monthly, (x) => (x.dealsWon ?? 0) * (avgContractValue ?? 0), programLengthMonths, calc.steadyAvgWon * (avgContractValue ?? 0)), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
         ];
+        // Page 2's tables step up a point from the shared on-screen scale — a printed
+        // page is read at arm's length, not scanned like a dense on-screen grid. Derived
+        // from S rather than edited into it so the on-screen tables stay put.
+        const SP = {
+          ...S,
+          th:  { ...S.th,  fontSize: 12 },
+          thl: { ...S.thl, fontSize: 12 },
+          td:  { ...S.td,  fontSize: 13.5 },
+          tdl: { ...S.tdl, fontSize: 13.5 },
+        };
         // Transposed monthly projection (page 2+): decorate with running cumulative
         // + dead-month flags, split into three phases, then paginate on phase seams.
         const mpCols = monthlyColumns(term, isrFTE > 0);
@@ -1746,38 +1765,55 @@ export default function PricingModel() {
 
             </div>{/* end PAGE 1 */}
 
-            {/* PAGE 2+ — Funnel milestone table, then the transposed monthly projection.
-                Full width, matching page 1's measure. The wrapper is a flex column set to
-                the sheet's usable height and the cards grow in proportion to their row
-                counts, so leftover space is absorbed evenly as row height instead of
-                pooling as a gap at the bottom. Content taller than the sheet simply
-                overrides the minimum and paginates as usual. */}
-            <div className="page-2 pb-before" style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: PAGE_FILL_HEIGHT }}>
-              {/* Funnel breakdown table */}
-              <div className="funnel-table-print" style={{ flex: `${funnelRows.length} 1 auto`, display: "flex", flexDirection: "column", background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 6, height: 18, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
-                  <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
-                  <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
-                </div>
-                <ProjectionTable rows={funnelRows} S={S} stretch />
-              </div>
+            {/* PAGE 2+ — one wrapper per printed sheet: the first carries the Funnel
+                milestone table plus the opening chunk of the monthly projection, and any
+                further chunk gets a sheet of its own. Full width, matching page 1's
+                measure.
 
-              {/* Monthly projection — one card per page chunk; chunks break on phase seams */}
-              {mpPages.map((groups, i) => (
+                Each sheet is its OWN flex column pinned to the sheet's usable height, with
+                cards growing in proportion to their row counts — so leftover space is
+                absorbed evenly as row height rather than pooling at the bottom. It has to
+                be per sheet, not one wrapper around the whole run: a single container
+                would stretch its rows against the total height of every sheet at once and
+                the fill would land in the wrong places.
+
+                paddingTop drops the first card off the top edge so the page doesn't read
+                as flush-mounted; because box-sizing is border-box it comes out of the
+                fixed minHeight rather than adding to it, so the sheet still can't spill. */}
+            {mpPages.map((groups, i) => {
+              const mpUnits = groups.reduce((a, g) => a + g.rows.length + 1, 0);
+              const sheetUnits = mpUnits + (i === 0 ? funnelRows.length : 0);
+              return (
+              <div
+                key={groups[0].key}
+                className="page-2 pb-before"
+                style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: PAGE_TOP_INSET, ...(sheetUnits >= MP_FILL_MIN_ROWS ? { minHeight: PAGE_FILL_HEIGHT } : {}) }}
+              >
+                {/* Funnel breakdown table — first sheet only */}
+                {i === 0 && (
+                  <div className="funnel-table-print" style={{ flex: `${funnelRows.length} 1 auto`, display: "flex", flexDirection: "column", background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <div style={{ width: 6, height: 18, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
+                      <span style={{ fontWeight: 700, fontSize: 14, color: C.text }}>Funnel</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 11, color: C.textFaint }}>cumulative if engagement continues</span>
+                    </div>
+                    <ProjectionTable rows={funnelRows} S={SP} stretch />
+                  </div>
+                )}
+
                 <div
-                  key={groups[0].key}
-                  className={i > 0 ? "mp-print pb-before" : "mp-print"}
-                  style={{ flex: `${groups.reduce((a, g) => a + g.rows.length + 1, 0)} 1 auto`, display: "flex", flexDirection: "column", background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}
+                  className="mp-print"
+                  style={{ flex: `${mpUnits} 1 auto`, display: "flex", flexDirection: "column", background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}
                 >
-                  <div style={{ padding: "8px 14px", borderBottom: `1px solid ${C.border}`, fontFamily: "monospace", fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.08em", background: C.bg, display: "flex", justifyContent: "space-between" }}>
+                  <div style={{ padding: "8px 14px", borderBottom: `1px solid ${C.border}`, fontFamily: "monospace", fontSize: 12, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.08em", background: C.bg, display: "flex", justifyContent: "space-between" }}>
                     <span>Expected Outcomes — Monthly Projection{i > 0 ? " (continued)" : ""}</span>
                     <span style={{ color: C.textFaint }}>{sdrFTE} SDR{isrFTE > 0 ? ` · ${isrFTE} ISR` : ""} · {programLengthMonths}mo program{calc.hasCycle ? ` + ${avgSalesCycleMonths}mo cycle` : ""}</span>
                   </div>
-                  <MonthlyProjectionTable groups={groups} cols={mpCols} S={S} stretch />
+                  <MonthlyProjectionTable groups={groups} cols={mpCols} S={SP} stretch />
                 </div>
-              ))}
-            </div>
+              </div>
+              );
+            })}
           </div>
         );
       })()}
