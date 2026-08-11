@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { Fragment, useState, useMemo, useRef, useEffect } from "react";
 import { buildFilename, proposalSubtitle } from "./lib/exports";
 import { getCalibratedRamp, defaultRampForLength } from "./lib/calibration";
 
@@ -180,6 +180,109 @@ function cumulativeAt(monthlyArr, getter, programLength, steadyPerMonth) {
     const extension = m > programLength ? (m - programLength) * steadyPerMonth : 0;
     return sumIn + extension;
   });
+}
+
+// ============================================================================
+// Monthly projection phases (PDF export, page 2+)
+// The projection has three acts, and naming them is what makes the "why is
+// revenue $0 for six months?" question answer itself in a client-facing
+// proposal. Ramp = the leading run of months whose per-rep target is still below
+// steady state — derived from the ramp array rather than hardcoded, so it stays
+// correct when a rep edits it or switches vertical/tier (every preset in
+// lib/calibration.js ramps over M1–M3 then flatlines). A flattened ramp yields
+// zero ramp months and the band is simply omitted.
+// ============================================================================
+function programPhases(ramp, programLength, totalMonths) {
+  const inProgram = ramp.slice(0, programLength).map((v) => v ?? 0);
+  const steady = inProgram.length ? Math.max(...inProgram) : 0;
+  let rampEnd = 0;
+  while (rampEnd < inProgram.length && inProgram[rampEnd] < steady) rampEnd++;
+
+  const phases = [];
+  if (rampEnd > 0) {
+    phases.push({ key: "ramp", name: "Ramp", from: 1, to: rampEnd, bg: C.amberLight, fg: C.amber });
+  }
+  if (programLength > rampEnd) {
+    phases.push({ key: "production", name: "Full production", from: rampEnd + 1, to: programLength, bg: C.blueLight, fg: C.blue });
+  }
+  if (totalMonths > programLength) {
+    phases.push({ key: "realization", name: "Revenue realization", from: programLength + 1, to: totalMonths, bg: C.greenLight, fg: C.greenDk });
+  }
+  return phases;
+}
+
+// Running cumulative won revenue, plus a `dead` flag for months where every
+// column would read "—". Derived by actually formatting the columns rather than
+// re-deriving the condition, so the rule can't drift from what renders.
+function decorateMonths(monthly, cols) {
+  let cum = 0;
+  return monthly.map((o) => {
+    cum += o.wonDealValue ?? 0;
+    const row = { ...o, cum };
+    return { ...row, dead: cols.every((c) => c.format(c.get(row)) === "—") };
+  });
+}
+
+// Collapse each run of dead months into one thin divider row. Dropping them
+// outright would make month numbering skip, which reads like a bug in a
+// client-facing PDF; a run-spanning divider keeps the continuity explicit while
+// still keeping the table tight. Runs never straddle the in/out-of-program line,
+// because the two states get different captions.
+function collapseDead(months) {
+  const out = [];
+  for (const o of months) {
+    const prev = out[out.length - 1];
+    if (o.dead && prev?.dead && prev.inProgram === o.inProgram) { prev.to = o.m; continue; }
+    out.push(o.dead ? { dead: true, from: o.m, to: o.m, inProgram: o.inProgram } : o);
+  }
+  return out;
+}
+
+// Row budget per printed page. Page 2 shares its height with the Funnel table
+// above it; later pages get the full sheet. Units are table rows — a phase band
+// costs one. Calibrated against measured print geometry: ~18px per row in a
+// 758px usable sheet (Letter landscape less the 0.3in inset), less ~171px of
+// funnel table and ~56px of caption + header, with headroom left for headers that
+// wrap onto a second line when ISR terms are long.
+const MP_ROW_BUDGET = [26, 36];
+// Never strand fewer than this many month rows on a page when splitting a phase.
+const MP_MIN_SPLIT = 4;
+
+// Group months under their phase and lay them out across pages. A break prefers a
+// phase seam — pagination along a semantic boundary reads as intentional. When
+// honoring the seam would leave the page less than half full (a 20-month
+// production phase can't share a page with anything), the phase is split instead
+// and the continuation relabelled with its own month range.
+function paginatePhases(phases, months) {
+  const groups = phases
+    .map((p) => ({ ...p, rows: collapseDead(months.filter((o) => o.m >= p.from && o.m <= p.to)) }))
+    .filter((g) => g.rows.length > 0);
+
+  const pages = [];
+  let page = [], used = 0;
+  const budget = () => MP_ROW_BUDGET[Math.min(pages.length, MP_ROW_BUDGET.length - 1)];
+  const flush = () => { if (page.length) { pages.push(page); page = []; used = 0; } };
+
+  for (const g of groups) {
+    let rows = g.rows, cont = false;
+    while (rows.length) {
+      const room = budget() - used - 1; // −1 for the phase band row
+      if (rows.length <= room) {
+        page.push({ ...g, rows, cont });
+        used += rows.length + 1;
+        break;
+      }
+      // Doesn't fit. If the page already carries its weight, keep the seam intact.
+      if (used > 0 && (used * 2 >= budget() || room < MP_MIN_SPLIT)) { flush(); continue; }
+      const take = Math.max(room, MP_MIN_SPLIT);
+      page.push({ ...g, rows: rows.slice(0, take), cont });
+      rows = rows.slice(take);
+      cont = true;
+      flush();
+    }
+  }
+  flush();
+  return pages;
 }
 
 // ============================================================================
@@ -443,6 +546,91 @@ function ProjectionTable({ rows, S, fill = false }) {
               </td>
             ))}
           </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// ============================================================================
+// MonthlyProjectionTable (PDF export, page 2+) — transposed monthly projection.
+// Months are ROWS and the metrics are COLUMNS. That inversion is what lets the
+// font stay locked at the Funnel table's scale: the column count is fixed by the
+// metric list (7, or 9 with ISR in program), so program length only consumes
+// vertical space instead of squeezing every column narrower. The old layout put
+// months across the page and had to drop to 8.5px to fit 13 of them.
+// ============================================================================
+
+// Column headers drop the "Total " prefix the row-per-metric layout needed — as
+// column heads it only added width.
+function monthlyColumns(term, isr) {
+  const dashN = (v) => (v == null || v === 0 ? "—" : fmtN(v, 0));
+  const dashUSD = (v) => (v == null || v === 0 ? "—" : fmt(v));
+  return [
+    { key: "sals", header: term("sal"), color: C.blue, get: (o) => (o.inProgram ? o.totalSals : null), format: dashN },
+    { key: "sqls", header: term("sql"), color: C.blue, get: (o) => (o.inProgram ? o.totalSqls : null), format: dashN },
+    ...(isr ? [
+      { key: "qopps", header: term("qopp"), color: C.navyMid, get: (o) => (o.inProgram ? o.qOpps : null), format: dashN },
+      { key: "saos",  header: term("sao"),  color: C.navyMid, get: (o) => (o.inProgram ? o.saos  : null), format: dashN },
+    ] : []),
+    { key: "pipeline", header: `${term("pipeline", "singular")} created`, color: C.greenDk, get: (o) => (o.inProgram ? o.pipelineCreated : null), format: dashUSD },
+    { key: "won",      header: `${term("deal")} won`,                    color: C.navy,    get: (o) => o.wonDealsCount, format: dashN,   bold: true },
+    // The revenue term already reads "Won Revenue" by default (and "Gross Profit"
+    // etc. once renamed), so it carries the column on its own — appending "won"
+    // would render "Won Revenue won".
+    { key: "rev",      header: term("revenue", "singular"),              color: C.green,   get: (o) => o.wonDealValue,  format: dashUSD, bold: true },
+    // Reading down this column is the payback story at a glance — the horizontal
+    // layout buried it in a single 13-column row.
+    { key: "cum",      header: "Cumulative",                             color: C.green,   get: (o) => o.cum,           format: dashUSD, bold: true },
+  ];
+}
+
+// "M4" / "M4–M22" — from a row (month or dead-run) at each end of a span.
+function monthSpan(first, last) {
+  const from = first.dead ? first.from : first.m;
+  const to = last.dead ? last.to : last.m;
+  return from === to ? `M${from}` : `M${from}–M${to}`;
+}
+
+function MonthlyProjectionTable({ groups, cols, S }) {
+  const span = cols.length + 1;
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <thead>
+        <tr>
+          <th style={{ ...S.thl, width: 52 }}>Month</th>
+          {cols.map((c) => <th key={c.key} style={S.th}>{c.header}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {groups.map((g) => (
+          <Fragment key={g.key + (g.cont ? "-cont" : "")}>
+            <tr>
+              <td colSpan={span} style={{ background: g.bg, color: g.fg, fontFamily: "monospace", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", padding: "4px 10px", borderBottom: `1px solid ${C.border}` }}>
+                {g.name}{g.cont ? " (cont.)" : ""} · {monthSpan(g.rows[0], g.rows[g.rows.length - 1])}
+              </td>
+            </tr>
+            {g.rows.map((r) => r.dead ? (
+              <tr key={`dead-${r.from}`}>
+                <td colSpan={span} style={{ ...S.tdl, fontSize: 9, fontStyle: "italic", color: C.textFaint, background: C.bg }}>
+                  {monthSpan(r, r)} · {r.inProgram ? "onboarding, no output yet" : "pipeline maturing"}
+                </td>
+              </tr>
+            ) : (
+              <tr key={r.m}>
+                <td style={{ ...S.tdl, fontWeight: 700, color: r.inProgram ? C.text : C.textFaint }}>M{r.m}</td>
+                {cols.map((c) => {
+                  const shown = c.format(c.get(r));
+                  const live = shown !== "—";
+                  return (
+                    <td key={c.key} style={{ ...S.td, color: live ? c.color : C.textFaint, fontWeight: live && c.bold ? 700 : 400 }}>
+                      {shown}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </Fragment>
         ))}
       </tbody>
     </table>
@@ -1440,23 +1628,35 @@ export default function PricingModel() {
       <style>{`
         @media screen { .proposal-print { display: none; } }
         @media print {
-          body * { visibility: hidden; }
+          /* Take the on-screen app out of print LAYOUT, not merely out of sight. The
+             old visibility:hidden left it in flow, so the browser still paginated its
+             100vh height — which emitted a trailing blank sheet as soon as the proposal
+             became shorter than the app itself. */
+          #root > div > * { display: none !important; }
+          #root > div > .proposal-print { display: block !important; }
+          html, body, #root, #root > div {
+            display: block !important; min-height: 0 !important; height: auto !important;
+            overflow: visible !important; background: #fff !important;
+          }
           /* print-color-adjust: exact forces backgrounds/fills (KPI boxes, navy hero,
-             funnel bars, row shading) to actually render — browsers drop them otherwise. */
-          .proposal-print, .proposal-print * { visibility: visible; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-          .proposal-print { position: absolute; left: 0; top: 0; width: 100%; display: block; box-sizing: border-box; padding: 0.3in; }
-          /* Page 1 = masthead + KPIs + funnel. The funnel has the page to itself, so
-             it's no longer height-capped — nothing clips. */
+             funnel bars, phase bands, row shading) to actually render — browsers drop
+             them otherwise. */
+          .proposal-print, .proposal-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+          .proposal-print { width: 100%; box-sizing: border-box; padding: 0.3in; }
+          /* Page 1 = masthead + KPIs + funnel graphic. It fills the sheet on its own,
+             so the funnel has the page to itself and nothing clips. */
           .proposal-print .funnel-print-wrap { break-inside: avoid; -webkit-column-break-inside: avoid; }
-          /* Page 2 begins at the funnel table; keep funnel table + Expected Outcomes
-             from splitting mid-element. */
+          /* Page 2 = funnel table + monthly projection, broken explicitly rather than
+             left to page-1 overflow so it can't drift as FunnelViz grows with ISR on. */
           .proposal-print .pb-before { break-before: page; page-break-before: always; }
           .proposal-print .funnel-table-print { break-inside: avoid; -webkit-column-break-inside: avoid; }
           /* Compress table rows vertically. !important overrides inline S.td/S.th padding. */
           .proposal-print table th, .proposal-print table td { padding-top: 2px !important; padding-bottom: 2px !important; }
-          /* Expected Outcomes: shrink font + side padding so every month column fits
-             the page width with no right-edge cut-off. */
-          .proposal-print .eo-print table th, .proposal-print .eo-print table td { font-size: 8.5px !important; padding-left: 3px !important; padding-right: 3px !important; }
+          /* Monthly projection is transposed (months as rows), so the metric count is
+             fixed and the font never needs shrinking. Keep month rows whole, and repeat
+             the header if a chunk still spills past its page. */
+          .proposal-print .mp-print thead { display: table-header-group; }
+          .proposal-print .mp-print tr { break-inside: avoid; -webkit-column-break-inside: avoid; }
           /* margin: 0 suppresses the browser's own header/footer (date, title, URL,
              page number); the 0.3in page inset is applied as padding on .proposal-print. */
           @page { size: Letter landscape; margin: 0; }
@@ -1481,10 +1681,16 @@ export default function PricingModel() {
           { label: `${term("deal")} Won`,                 values: cumulativeAt(calc.monthly, (x) => x.dealsWon,        programLengthMonths, calc.steadyAvgWon),      color: C.navy,    format: (v) => fmtN(v, 0), enabled: calc.hasClose },
           { label: `Total ${term("revenue","singular")}`, values: cumulativeAt(calc.monthly, (x) => (x.dealsWon ?? 0) * (avgContractValue ?? 0), programLengthMonths, calc.steadyAvgWon * (avgContractValue ?? 0)), color: C.green, format: (v) => fmt(v), enabled: calc.hasACV && calc.hasClose },
         ];
-        let cumICV = 0;
+        // Transposed monthly projection (page 2+): decorate with running cumulative
+        // + dead-month flags, split into three phases, then paginate on phase seams.
+        const mpCols = monthlyColumns(term, isrFTE > 0);
+        const mpPages = paginatePhases(
+          programPhases(ramp, programLengthMonths, calc.monthly.length),
+          decorateMonths(calc.monthly, mpCols),
+        );
         return (
           <div className="proposal-print" style={{ background: C.white, color: C.text, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-            {/* PAGE 1 — masthead + KPIs + funnel, with the funnel table pinned to the bottom */}
+            {/* PAGE 1 — masthead + KPIs + funnel graphic */}
             <div className="page-1" style={{ display: "flex", flexDirection: "column", minHeight: "7.6in" }}>
             {/* Masthead */}
             <div style={{ background: C.navy, color: C.white, padding: "10px 16px", borderRadius: 8, marginBottom: 8 }}>
@@ -1522,86 +1728,36 @@ export default function PricingModel() {
               />
             </div>
 
-            {/* Funnel breakdown table — pinned to the bottom of page 1 */}
-            <div className="funnel-table-print" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginTop: "auto" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{ width: 6, height: 18, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
-                <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
-                <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
-              </div>
-              <ProjectionTable rows={funnelRows} S={S} />
-            </div>
             </div>{/* end PAGE 1 */}
 
-            {/* PAGE 2 — Expected Outcomes monthly table (forced onto a new page) */}
-            <div className="eo-print pb-before" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
-              <div style={{ padding: "8px 14px", borderBottom: `1px solid ${C.border}`, fontFamily: "monospace", fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.08em", background: C.bg, display: "flex", justifyContent: "space-between" }}>
-                <span>Expected Outcomes — Monthly Projection</span>
-                <span style={{ color: C.textFaint }}>{sdrFTE} SDR{isrFTE > 0 ? ` · ${isrFTE} ISR` : ""} · {programLengthMonths}mo program{calc.hasCycle ? ` + ${avgSalesCycleMonths}mo cycle` : ""}</span>
+            {/* PAGE 2+ — Funnel milestone table, then the transposed monthly projection.
+                Both share one centered ~7.5in measure so they read as a pair rather than
+                stretching across the full landscape width. */}
+            <div className="page-2 pb-before" style={{ maxWidth: "7.5in", margin: "0 auto" }}>
+              {/* Funnel breakdown table */}
+              <div className="funnel-table-print" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 6, height: 18, background: isrFTE > 0 ? C.navyMid : C.blue, borderRadius: 3 }} />
+                  <span style={{ fontWeight: 700, fontSize: 13, color: C.text }}>Funnel</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 10, color: C.textFaint }}>cumulative if engagement continues</span>
+                </div>
+                <ProjectionTable rows={funnelRows} S={S} />
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th style={{ ...S.thl, minWidth: 170 }}>Metric</th>
-                    {calc.monthly.map((o) => (
-                      <th key={o.m} style={{ ...S.th, color: o.inProgram ? C.text : C.textFaint }}>M{o.m}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr style={{ background: C.blueLight }}>
-                    <td style={{ ...S.tdl, fontWeight: 700, color: C.blue }}>{term("sal")} per SDR</td>
-                    {calc.monthly.map((o, i) => (
-                      <td key={o.m} style={S.td}>{o.inProgram ? fmtN(ramp[i] ?? 0, 0) : "—"}</td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td style={S.tdl}>Total {term("sal")}</td>
-                    {calc.monthly.map((o) => <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.totalSals, 0) : "—"}</td>)}
-                  </tr>
-                  <tr style={{ background: C.bg }}>
-                    <td style={S.tdl}>Total {term("sql")}</td>
-                    {calc.monthly.map((o) => <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.totalSqls, 0) : "—"}</td>)}
-                  </tr>
-                  {isrFTE > 0 && (
-                    <tr>
-                      <td style={S.tdl}>Total {term("qopp")}</td>
-                      {calc.monthly.map((o) => <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.qOpps, 0) : "—"}</td>)}
-                    </tr>
-                  )}
-                  {isrFTE > 0 && (
-                    <tr style={{ background: C.bg }}>
-                      <td style={S.tdl}>Total {term("sao")}</td>
-                      {calc.monthly.map((o) => <td key={o.m} style={S.td}>{o.inProgram ? fmtN(o.saos, 0) : "—"}</td>)}
-                    </tr>
-                  )}
-                  <tr>
-                    <td style={S.tdl}>Total {term("pipeline","singular")} Created</td>
-                    {calc.monthly.map((o) => (
-                      <td key={o.m} style={{ ...S.td, color: o.inProgram ? C.greenDk : C.textFaint }}>{o.inProgram && o.pipelineCreated != null ? fmt(o.pipelineCreated) : "—"}</td>
-                    ))}
-                  </tr>
-                  <tr style={{ background: C.bg }}>
-                    <td style={S.tdl}>Total {term("deal")} Won</td>
-                    {calc.monthly.map((o) => (
-                      <td key={o.m} style={{ ...S.td, color: (o.wonDealsCount ?? 0) > 0 ? C.navy : C.textFaint, fontWeight: (o.wonDealsCount ?? 0) > 0 ? 700 : 400 }}>{o.wonDealsCount == null ? "—" : fmtN(o.wonDealsCount, 0)}</td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td style={{ ...S.tdl, fontWeight: 700, color: C.text }}>Revenue Closed Won (Per Month)</td>
-                    {calc.monthly.map((o) => (
-                      <td key={o.m} style={{ ...S.td, color: (o.wonDealValue ?? 0) > 0 ? C.green : C.textFaint, fontWeight: (o.wonDealValue ?? 0) > 0 ? 700 : 400 }}>{o.wonDealValue == null ? "—" : fmt(o.wonDealValue)}</td>
-                    ))}
-                  </tr>
-                  <tr style={{ background: C.bg }}>
-                    <td style={{ ...S.tdl, fontWeight: 700, color: C.green }}>Revenue Closed Won (Cumulative)</td>
-                    {calc.monthly.map((o) => {
-                      cumICV += (o.wonDealValue ?? 0);
-                      return <td key={o.m} style={{ ...S.td, color: cumICV > 0 ? C.green : C.textFaint, fontWeight: 700 }}>{o.wonDealValue == null ? "—" : fmt(cumICV)}</td>;
-                    })}
-                  </tr>
-                </tbody>
-              </table>
+
+              {/* Monthly projection — one card per page chunk; chunks break on phase seams */}
+              {mpPages.map((groups, i) => (
+                <div
+                  key={groups[0].key}
+                  className={i > 0 ? "mp-print pb-before" : "mp-print"}
+                  style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}
+                >
+                  <div style={{ padding: "8px 14px", borderBottom: `1px solid ${C.border}`, fontFamily: "monospace", fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.08em", background: C.bg, display: "flex", justifyContent: "space-between" }}>
+                    <span>Expected Outcomes — Monthly Projection{i > 0 ? " (continued)" : ""}</span>
+                    <span style={{ color: C.textFaint }}>{sdrFTE} SDR{isrFTE > 0 ? ` · ${isrFTE} ISR` : ""} · {programLengthMonths}mo program{calc.hasCycle ? ` + ${avgSalesCycleMonths}mo cycle` : ""}</span>
+                  </div>
+                  <MonthlyProjectionTable groups={groups} cols={mpCols} S={S} />
+                </div>
+              ))}
             </div>
           </div>
         );
